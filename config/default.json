@@ -6,12 +6,35 @@
     "agreement_check": true,
     "deferral": true
   },
+  "preprocessing": {
+    "output_type": "single",
+    "channel_mean": [0, 0, 0],
+    "channel_std": [0.00392156862745098, 0.00392156862745098, 0.00392156862745098]
+  },
   "grading": {
     "backbone": "resnet50",
     "input_size": 448,
-    "head": "ordinal",
-    "batch_size": 12,
+    "head": "softmax",
+    "num_classes": 5,
+    "batch_size": 16,
     "seed": 42
+  },
+  "training": {
+    "max_epochs": 10,
+    "learning_rate": 0.0001,
+    "gradient_decay_factor": 0.9,
+    "squared_gradient_decay_factor": 0.999,
+    "epsilon": 0.00000001,
+    "smoke_epochs": 1,
+    "smoke_examples_per_class": 2,
+    "smoke_batch_size": 2,
+    "smoke_freeze_backbone": true
+  },
+  "class_balancing": {
+    "method": "inverse_frequency"
+  },
+  "data": {
+    "dataset": "APTOS"
   },
   "operating_point": { "referable_threshold": null, "frozen_on": null }
 }

@@ -221,10 +221,14 @@ if strcmp(mode, 'none') || ~any(mask(:))
     return;
 end
 [rows, columns] = find(mask);
-boundingBox = [columns(1), rows(1), columns(end) - columns(1) + 1, ...
-    rows(end) - rows(1) + 1];
+rowStart = min(rows);
+rowEnd = max(rows);
+columnStart = min(columns);
+columnEnd = max(columns);
+boundingBox = [columnStart, rowStart, columnEnd - columnStart + 1, ...
+    rowEnd - rowStart + 1];
 if strcmp(mode, 'crop')
-    image = image(rows(1):rows(end), columns(1):columns(end), :);
+    image = image(rowStart:rowEnd, columnStart:columnEnd, :);
 else
     for channel = 1:size(image, 3)
         channelImage = image(:, :, channel);

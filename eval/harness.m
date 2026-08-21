@@ -23,6 +23,8 @@ end
 
 fprintf('Binary sensitivity (referable ICDR >= 2): %.6f\n', binary.sensitivity);
 fprintf('Binary specificity (referable ICDR >= 2): %.6f\n', binary.specificity);
+fprintf('Referable-DR sensitivity (ICDR >= 2): %.6f\n', binary.sensitivity);
+fprintf('Referable-DR specificity (ICDR >= 2): %.6f\n', binary.specificity);
 fprintf('Number of samples: %d\n', binary.n);
 
 if collapseWarning
