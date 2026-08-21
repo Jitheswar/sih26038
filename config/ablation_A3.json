@@ -1,0 +1,17 @@
+{
+  "pipeline": {
+    "quality_gate": false,
+    "enhancement": false,
+    "lesion_evidence": true,
+    "agreement_check": false,
+    "deferral": false
+  },
+  "grading": {
+    "backbone": "none",
+    "input_size": 448,
+    "head": "icdr_rules",
+    "batch_size": 12,
+    "seed": 42
+  },
+  "operating_point": { "referable_threshold": null, "frozen_on": null }
+}

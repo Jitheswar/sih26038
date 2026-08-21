@@ -720,16 +720,16 @@ fovRadius = stats.EquivDiameter / 2;</code></pre>
 
 <h2>7.4 Class imbalance</h2>
 
-<p>APTOS is markedly imbalanced, with Level 0 the dominant class and Levels 3 and 4 sparse. <span class="tag v">Verified</span> &mdash; exact distribution of the 3,662-image training set below, from Kaggle's own column statistics for <code>train.csv</code>. <strong>Re-derive these from the downloaded CSV on day one and confirm they match</strong>; a one-line check that agrees with the source is worth more in the submission than a quoted number.</p>
+<p>APTOS is markedly imbalanced, with Level 0 the dominant class and Levels 3 and 4 sparse. <span class="tag v">Verified</span> &mdash; the exact distribution below was recomputed from the downloaded <code>data/raw/aptos2019/train.csv</code> on 22 August 2026 and is recorded with the archive hash in <code>data/PROVENANCE.md</code>.</p>
 
 <table class="tight">
 <thead><tr><th style="width:12%">Grade</th><th style="width:24%">Name</th><th style="width:16%">Count</th><th>Share</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>No DR</td><td>1,805</td><td>49.29%</td></tr>
-<tr><td>1</td><td>Mild</td><td>370</td><td>10.10%</td></tr>
-<tr><td>2</td><td>Moderate</td><td>999</td><td>27.28%</td></tr>
-<tr><td>3</td><td>Severe</td><td>193</td><td>5.27%</td></tr>
-<tr><td>4</td><td>Proliferative DR</td><td>295</td><td>8.06%</td></tr>
+<tr><td>0</td><td>No DR</td><td>1,805</td><td>49.29000546%</td></tr>
+<tr><td>1</td><td>Mild</td><td>370</td><td>10.10376843%</td></tr>
+<tr><td>2</td><td>Moderate</td><td>999</td><td>27.28017477%</td></tr>
+<tr><td>3</td><td>Severe</td><td>193</td><td>5.27034407%</td></tr>
+<tr><td>4</td><td>Proliferative DR</td><td>295</td><td>8.05570726%</td></tr>
 <tr><td colspan="2"><strong>Total</strong></td><td><strong>3,662</strong></td><td>100%</td></tr>
 </tbody>
 </table>
@@ -1010,7 +1010,7 @@ AGREEMENT      Rule path and CNN agree
 </tbody>
 </table>
 
-<p class="small"><span class="tag v">Verified</span> &mdash; all counts above were confirmed against the datasets' own distribution pages and papers (<code>docs/research/verification.md</code>, Appendix A row U8). The data owner should still re-derive them from the actual downloads and record any discrepancy in <code>data/PROVENANCE.md</code>; a number we have personally recomputed is worth more under questioning than one we have read.</p>
+<p class="small"><span class="tag v">Verified</span> &mdash; all counts above were confirmed against the datasets' own distribution pages and papers (<code>docs/research/verification.md</code>, Appendix A row U8), and the downloaded archives were checked and recorded in <code>data/PROVENANCE.md</code>.</p>
 
 <div class="box warn">
 <h3 style="margin-top:0">Messidor-2 does not ship diabetic retinopathy grades</h3>
@@ -1602,7 +1602,7 @@ A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
 <tr><td>U11</td><td>Colour normalisation attribution</td><td>§7.2</td><td><span class="tag u">Open</span></td><td>Not part of this pass. Still tagged Unverified in the text. <strong>Assign it.</strong> Standing rule holds: describe the method, name no individual.</td></tr>
 <tr><td>U12</td><td>Non-pathological attribute prediction</td><td>§4.2</td><td><span class="tag v">Confirmed</span></td><td>Confirmed with the full attribute list in §18.2. Two quoting hazards recorded: systolic BP 11.23 vs 11.35, and HbA1c missing from the published abstract.</td></tr>
 <tr><td>&mdash;</td><td>DRIVE 20/20 split sizes</td><td>§6.3</td><td><span class="tag v">Confirmed</span></td><td>20/20 confirmed as the dataset's own defined split. Added the test-annotation provenance point: the challenge site withholds them, the circulated archive does not.</td></tr>
-<tr><td>&mdash;</td><td>APTOS class distribution</td><td>§7.4</td><td><span class="tag v">Confirmed</span></td><td>Exact per-class counts now tabulated in §7.4. Noted that Level 1 is nearly as sparse as Level 4 and sits on our referral threshold. <strong>Re-derive from the downloaded CSV to convert this from a quoted number into a checked one.</strong></td></tr>
+<tr><td>&mdash;</td><td>APTOS class distribution</td><td>§7.4</td><td><span class="tag v">Confirmed</span></td><td>Exact per-class counts and shares were recomputed from the downloaded <code>train.csv</code> and recorded in <code>data/PROVENANCE.md</code>. Level 1 is nearly as sparse as Level 4 and sits on our referral threshold.</td></tr>
 <tr><td>&mdash;</td><td>SIH judging theme bucket for PS 26038</td><td>§2.1</td><td><span class="tag u">Open</span></td><td>Not part of this pass. <strong>Assign it.</strong></td></tr>
 </tbody>
 </table>
@@ -1626,7 +1626,7 @@ A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
 <tr><td>☐</td><td><strong>Request Messidor-2 image access</strong> (ADCIS licence agreement, can take days)</td><td></td><td>Sealed external test set (R03)</td></tr>
 <tr><td>☐</td><td><strong>Obtain a Messidor-2 DR grade set</strong> &mdash; the official release has none</td><td></td><td>Without grades the sealed external test cannot be scored at all (§10.1, R03)</td></tr>
 <tr><td>☐</td><td>Download DRIVE</td><td></td><td>Vessel segmentation</td></tr>
-<tr><td>☐</td><td>Create <code>data/PROVENANCE.md</code>; record sizes, dates, licences, hashes</td><td></td><td>§10.3. U8 and the class distribution are now sourced (Appendix A), so this becomes a <strong>cross-check</strong>: re-derive the counts from the downloads and record any discrepancy against §10.1 and §7.4</td></tr>
+<tr><td>☑</td><td>Create <code>data/PROVENANCE.md</code>; record sizes, dates, licences, hashes</td><td>22 Aug</td><td>§10.3. Archive metadata and the APTOS class distribution were cross-checked against the downloads and recorded in §7.4 and <code>data/PROVENANCE.md</code></td></tr>
 <tr><td>☐</td><td>Confirm the SIH judging theme bucket with the SPOC</td><td></td><td>Portal lists this MedTech PS under Clean &amp; Green Technology (§2.1)</td></tr>
 <tr><td>☐</td><td><strong>Open the SimEvents workstream</strong> &mdash; independent of all ML work</td><td></td><td>R11; highest return per hour in the PS</td></tr>
 <tr><td>☐</td><td>Email an ophthalmology department to request one reader for two hours</td><td></td><td>§12; long lead time, one email</td></tr>

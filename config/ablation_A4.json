@@ -1,0 +1,17 @@
+{
+  "pipeline": {
+    "quality_gate": true,
+    "enhancement": true,
+    "lesion_evidence": false,
+    "agreement_check": false,
+    "deferral": true
+  },
+  "grading": {
+    "backbone": "resnet50",
+    "input_size": 448,
+    "head": "ordinal",
+    "batch_size": 12,
+    "seed": 42
+  },
+  "operating_point": { "referable_threshold": null, "frozen_on": null }
+}
