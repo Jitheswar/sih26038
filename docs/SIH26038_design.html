@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SIH26038 Technical Design Document</title>
+<style>
+@page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+
+:root{
+  --ink:#14181f; --mute:#5a6472; --rule:#d8dee7; --accent:#0b4f8a;
+  --accent2:#8a2b0b; --ok:#1c6b3a; --warn:#8a6a0b; --bg-soft:#f4f6f9;
+}
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+body{
+  font-family:"Charter","Bitstream Charter","Georgia","Liberation Serif",serif;
+  font-size:9.9pt; line-height:1.5; color:var(--ink); margin:0;
+  hyphens:auto; text-align:left;
+}
+code,pre,.mono{font-family:"JetBrains Mono","DejaVu Sans Mono","Liberation Mono",monospace}
+
+h1,h2,h3,h4{font-family:"Inter","Helvetica Neue","Liberation Sans",sans-serif; font-weight:700; line-height:1.22; color:var(--ink)}
+h1{font-size:17pt; margin:0 0 4mm; padding-bottom:2mm; border-bottom:2.5px solid var(--accent); break-before:page; break-after:avoid}
+h1:first-of-type{break-before:auto}
+h2{font-size:12pt; margin:7mm 0 2.5mm; color:var(--accent); break-after:avoid}
+h3{font-size:10.4pt; margin:5mm 0 1.5mm; break-after:avoid}
+h4{font-size:9.9pt; margin:4mm 0 1mm; color:var(--mute); text-transform:uppercase; letter-spacing:.05em; font-size:8.4pt; break-after:avoid}
+p{margin:0 0 2.4mm}
+ul,ol{margin:0 0 2.6mm; padding-left:5.5mm}
+li{margin-bottom:1.1mm}
+li>ul,li>ol{margin-top:1.1mm}
+strong{font-weight:700}
+a{color:var(--accent); text-decoration:none}
+
+table{width:100%; border-collapse:collapse; margin:3mm 0 4mm; font-size:8.6pt; break-inside:auto}
+th{background:var(--accent); color:#fff; text-align:left; padding:1.6mm 2mm; font-family:"Inter","Liberation Sans",sans-serif; font-weight:600; font-size:8.2pt; vertical-align:bottom}
+td{padding:1.5mm 2mm; border-bottom:.5px solid var(--rule); vertical-align:top}
+tbody tr:nth-child(even){background:#fafbfd}
+table.tight td, table.tight th{padding:1.1mm 1.6mm; font-size:8.1pt}
+tr{break-inside:avoid}
+
+code{font-size:8.5pt; background:var(--bg-soft); padding:.3mm 1mm; border-radius:2px; border:.5px solid var(--rule)}
+pre{background:var(--bg-soft); border:.5px solid var(--rule); border-left:2.5px solid var(--accent);
+    padding:2.4mm 3mm; font-size:8.2pt; line-height:1.42; overflow-wrap:break-word; white-space:pre-wrap;
+    margin:2.5mm 0 3.5mm; break-inside:avoid}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+
+.box{border:.5px solid var(--rule); border-left:3px solid var(--accent); background:var(--bg-soft);
+     padding:2.8mm 3.4mm; margin:3mm 0 4mm; break-inside:avoid; font-size:9.3pt}
+.box.warn{border-left-color:var(--accent2); background:#fdf5f2}
+.box.ok{border-left-color:var(--ok); background:#f3f9f5}
+.box h4{margin-top:0; color:var(--ink)}
+
+.title-page{text-align:center; padding-top:52mm; break-after:page}
+.title-page .ps{font-family:"Inter","Liberation Sans",sans-serif; font-size:9pt; letter-spacing:.22em;
+                text-transform:uppercase; color:var(--accent); margin-bottom:6mm}
+.title-page h1{border:none; font-size:26pt; break-before:auto; margin-bottom:3mm; padding:0; line-height:1.15}
+.title-page .sub{font-size:13pt; color:var(--mute); margin-bottom:14mm; font-style:italic}
+.title-page .meta{font-size:9.4pt; color:var(--mute); line-height:1.85}
+.title-page .rule{width:34mm; height:2px; background:var(--accent); margin:0 auto 8mm}
+
+.toc{font-size:9.2pt; column-count:2; column-gap:9mm}
+.toc div{margin-bottom:1.3mm; break-inside:avoid}
+.toc .n{display:inline-block; width:9mm; color:var(--accent); font-weight:700;
+        font-family:"Inter","Liberation Sans",sans-serif}
+.toc .sub{padding-left:9mm; color:var(--mute); font-size:8.4pt}
+
+.tag{display:inline-block; font-family:"Inter","Liberation Sans",sans-serif; font-size:7pt; font-weight:700;
+     letter-spacing:.06em; text-transform:uppercase; padding:.5mm 1.4mm; border-radius:2px; vertical-align:middle}
+.tag.v{background:#dcefe2; color:var(--ok)}
+.tag.u{background:#fbeecd; color:var(--warn)}
+.tag.k{background:#e2eaf5; color:var(--accent)}
+
+.lead{font-size:10.6pt; color:var(--mute); line-height:1.55; margin-bottom:4mm}
+.small{font-size:8.4pt; color:var(--mute)}
+figure{margin:3mm 0 4mm; break-inside:avoid}
+figcaption{font-size:8.2pt; color:var(--mute); margin-top:1.5mm; text-align:center}
+.ascii{font-family:"DejaVu Sans Mono","Liberation Mono",monospace; font-size:7.4pt; line-height:1.3;
+       background:var(--bg-soft); border:.5px solid var(--rule); padding:3mm; white-space:pre; overflow-x:auto}
+hr{border:none; border-top:.5px solid var(--rule); margin:5mm 0}
+.kv{font-size:9pt}
+.kv td:first-child{width:34%; font-weight:600}
+.nobreak{break-inside:avoid}
+</style>
+</head>
+<body>
+
+<div class="title-page">
+  <div class="ps">Smart India Hackathon 2026 &middot; Problem Statement 26038</div>
+  <h1>Explainable AI for Diabetic Retinopathy Screening in Rural India</h1>
+  <div class="sub">Technical Design Document</div>
+  <div class="rule"></div>
+  <div class="meta">
+    <strong>Organisation:</strong> MathWorks &middot; <strong>Category:</strong> Software<br>
+    <strong>Version:</strong> 1.0 &middot; <strong>Date:</strong> 21 August 2026<br>
+    <strong>Status:</strong> Baseline for team execution<br>
+    <strong>Presenting member:</strong> Rithviksai
+  </div>
+</div>
+
+<h1>0. How to Use This Document</h1>
+
+<p class="lead">This is the team's single source of truth. Every technical decision recorded here carries the reason it was made, because at judging you will be asked to defend choices, not to prove you typed the code.</p>
+
+<h2>0.1 Reading paths</h2>
+
+<table>
+<thead><tr><th style="width:26%">If you are</th><th>Read</th></tr></thead>
+<tbody>
+<tr><td>Presenting (Rithviksai)</td><td>§1, §2, §3, §11, §17, and the "Design rationale" subsection of §5&ndash;§9. These contain every answer to a likely judge question.</td></tr>
+<tr><td>Building the ML pipeline</td><td>§5&ndash;§8, §10, §11, §13, §14</td></tr>
+<tr><td>Building the Simulink model</td><td>§9, §10.1, §12.3</td></tr>
+<tr><td>Writing the pitch deck</td><td>§1, §2.3, §11.1, §16, §17</td></tr>
+</tbody>
+</table>
+
+<h2>0.2 Evidence marking convention</h2>
+
+<p>The team asked explicitly for content that is real and applicable rather than plausible-sounding. Every factual claim in this document is therefore tagged:</p>
+
+<table class="tight">
+<thead><tr><th style="width:20%">Tag</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><span class="tag v">Verified</span></td><td>Confirmed against a primary source during document preparation. Source listed in §18.</td></tr>
+<tr><td><span class="tag k">Established</span></td><td>Standard, widely reproduced knowledge in the field (e.g. the ICDR grading rules). Safe to state, but cite the primary reference in §18 before putting a number on a slide.</td></tr>
+<tr><td><span class="tag u">Unverified</span></td><td>Believed correct but <strong>not</strong> confirmed. <strong>Do not put these on a slide or in the SIH submission until a team member has checked the primary source.</strong> Tracked in Appendix B.</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The one rule that matters most</h4>
+<p style="margin-bottom:0">If a number is tagged Unverified and nobody has checked it by the time you present, <strong>delete it</strong>. A missing statistic costs you nothing. A fabricated one, challenged by a judge who knows the literature, ends your run. This applies with equal force to model results: report what you measured, not what you hoped for.</p>
+</div>
+
+<h2>0.3 Document control</h2>
+<table class="kv">
+<tbody>
+<tr><td>Owner</td><td>Team lead</td></tr>
+<tr><td>Revision trigger</td><td>Any change to the validation protocol, the frozen operating point, or the dataset split</td></tr>
+<tr><td>Frozen sections</td><td>§10.4 (sealed test set) and §11.2 (operating point) must not be edited after the freeze date without recording the change and the reason in this table</td></tr>
+</tbody>
+</table>
+
+<h1>1. Executive Summary</h1>
+
+<h2>1.1 What we are building</h2>
+
+<p>A MATLAB-based retinal image analysis pipeline that screens fundus photographs for diabetic retinopathy at primary health centres in rural India, and that explains every decision it makes in terms a clinician can check in under thirty seconds.</p>
+
+<p>The pipeline has five stages, matching the five requirements of SIH26038 one-to-one: an image quality gate that rejects ungradable captures and tells the operator how to retake them; a segmentation stage that finds the optic disc, fovea, vessels and the four lesion classes that define DR severity; a grading stage that outputs an International Clinical Diabetic Retinopathy (ICDR) severity level with a calibrated confidence; an explainability module that produces Grad-CAM attention maps <em>and</em> lesion-level clinical evidence <em>and</em> an annotated referral report; and a SimEvents discrete-event model of the district telemedicine programme that sizes grader and bandwidth capacity for a population of 100,000+ screened per year.</p>
+
+<h2>1.2 The distinctive claim</h2>
+
+<p>The problem statement says existing AI solutions "function as black boxes, lack clinical validation rigor, and fail with variable image quality from portable fundus cameras in field conditions." Those are three separate charges, and our design answers each with a concrete mechanism rather than a claim.</p>
+
+<table>
+<thead><tr><th style="width:30%">PS charge</th><th>Our mechanism</th></tr></thead>
+<tbody>
+<tr>
+<td><em>"function as black boxes"</em></td>
+<td>Two independent explanation channels, and a measured comparison between them. Grad-CAM (post-hoc, mandated by the PS) is benchmarked against inherently interpretable lesion-level evidence on the same images, scored quantitatively against IDRiD pixel-level lesion masks. Where the two disagree, the case is flagged as an <strong>unexplained prediction</strong> and routed to a human. Explanation stops being decoration and becomes a safety control.</td>
+</tr>
+<tr>
+<td><em>"lack clinical validation rigor"</em></td>
+<td>Messidor-2 is sealed before development begins and opened exactly once, after the operating point has been frozen on a separate validation split. Results are reported at a pre-committed threshold with confidence intervals, per-class recall, and calibration error &mdash; never as bare accuracy. If external performance falls short of the PS targets, we report and analyse that rather than tuning until it looks good.</td>
+</tr>
+<tr>
+<td><em>"fail with variable image quality"</em></td>
+<td>A quality gate runs <em>before</em> the classifier is permitted to predict, and can refuse. Every downstream metric is additionally reported stratified by quality tier, so the reader can see how performance degrades as capture conditions worsen instead of seeing a single number averaged over a clean subset.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>1.3 Why the explanation channel is worth building</h2>
+
+<p>The value of explanations in DR screening is not an assumption we are making. It has been measured. A 2025 study in <em>PLOS Digital Health</em> compared an inherently interpretable model (a sparse BagNet, whose receptive field is deliberately capped so that its evidence map <em>is</em> its reasoning) against post-hoc saliency, and ran a reader study with six ophthalmologists. <span class="tag v">Verified</span></p>
+
+<table>
+<thead><tr><th>Measurement</th><th style="width:16%">Result</th><th>Why it matters to us</th></tr></thead>
+<tbody>
+<tr><td>Lesion localisation precision, sparse BagNet</td><td><strong>0.960</strong></td><td rowspan="2">Post-hoc saliency is substantially worse at landing on the actual lesion. This is the evidence base for building a second, lesion-grounded channel rather than shipping Grad-CAM alone.</td></tr>
+<tr><td>Lesion localisation precision, Guided Backpropagation</td><td>0.656</td></tr>
+<tr><td>Ophthalmologist accuracy, unaided</td><td>0.611</td><td rowspan="3">Explanations add accuracy <em>on top of</em> the prediction (0.758 &rarr; 0.786). The AI does not merely automate; the explanation itself carries information the grader uses.</td></tr>
+<tr><td>&hellip; with AI prediction only</td><td>0.758</td></tr>
+<tr><td>&hellip; with AI prediction and explanation</td><td><strong>0.786</strong></td></tr>
+<tr><td>Time per case with explanations</td><td><strong>11.7 s</strong> vs 15.2 s</td><td>~25% faster. Maps directly onto the PS requirement of "ophthalmologist validation in under 30 seconds."</td></tr>
+</tbody>
+</table>
+
+<h2>1.4 What most competing teams will not build</h2>
+
+<p>Requirement 5 of the PS &mdash; the Simulink workflow simulation &mdash; is a fifth of the problem statement and is almost universally skipped or reduced to a static bar chart. It requires no GPU, no dataset and no machine learning. It is the single cheapest differentiator available, and it is the MathWorks-specific part of a MathWorks problem statement.</p>
+
+<p>It is also genuinely interesting, because it closes a loop nothing else in the pipeline closes: the classifier's operating point is an <em>input</em> to the capacity model. Raising sensitivity produces more false positives, which consumes more grader hours, which lengthens turnaround. There is an optimum, and we can find it and plot it. See §9.</p>
+
+<h1>2. Problem Statement Decomposition</h1>
+
+<h2>2.1 Source text</h2>
+
+<table class="kv">
+<tbody>
+<tr><td>Problem Statement ID</td><td>26038</td></tr>
+<tr><td>Title</td><td>Explainable AI for Diabetic Retinopathy Screening in Rural India</td></tr>
+<tr><td>Organisation / Department</td><td>MathWorks</td></tr>
+<tr><td>Category</td><td>Software</td></tr>
+<tr><td>Theme (as listed on portal)</td><td>Clean &amp; Green Technology</td></tr>
+<tr><td>Named datasets</td><td>APTOS 2019 Blindness Detection; IDRiD; DRIVE; Messidor-2</td></tr>
+<tr><td>Named toolboxes</td><td>Image Processing, Computer Vision, Deep Learning, Medical Imaging, Simulink, Statistics and Machine Learning</td></tr>
+</tbody>
+</table>
+
+<div class="box">
+<h4>Note on the theme tag</h4>
+<p style="margin-bottom:0">The portal lists this MedTech problem under <em>Clean &amp; Green Technology</em>. This appears to be a portal categorisation artefact rather than a substantive instruction. It matters operationally because it determines which theme bucket you are judged in and how many teams you compete against. <strong>Action:</strong> confirm the judging bucket with your SPOC before 30 August. Do not attempt to re-frame the project as an environmental one; the PS body is unambiguously clinical.</p>
+</div>
+
+<h2>2.2 Requirements traceability</h2>
+
+<p>Every requirement below is extracted verbatim in substance from the PS. The right-hand column is the section of this document that discharges it. Nothing in the PS is unaddressed; where we cannot fully deliver a requirement with the available data, that is stated explicitly rather than glossed (see R2.6).</p>
+
+<table class="tight">
+<thead><tr><th style="width:8%">ID</th><th style="width:46%">Requirement (from PS)</th><th style="width:12%">Type</th><th style="width:12%">Section</th><th>Risk</th></tr></thead>
+<tbody>
+<tr><td><strong>R1.1</strong></td><td>Automatically evaluate fundus images for adequacy: focus, illumination, field of view</td><td>Functional</td><td>§5.2</td><td>Low</td></tr>
+<tr><td><strong>R1.2</strong></td><td>Apply adaptive enhancement (CLAHE, illumination normalisation, denoising) for borderline images</td><td>Functional</td><td>§5.4</td><td>Low</td></tr>
+<tr><td><strong>R1.3</strong></td><td>Reject ungradable images with recapture feedback</td><td>Functional</td><td>§5.5</td><td>Low</td></tr>
+<tr><td><strong>R2.1</strong></td><td>Optic disc and fovea localisation</td><td>Functional</td><td>§6.2</td><td>Low</td></tr>
+<tr><td><strong>R2.2</strong></td><td>Vessel segmentation</td><td>Functional</td><td>§6.3</td><td>Low</td></tr>
+<tr><td><strong>R2.3</strong></td><td>Microaneurysm detection ("sub-pixel")</td><td>Functional</td><td>§6.4</td><td><strong>High</strong></td></tr>
+<tr><td><strong>R2.4</strong></td><td>Exudate segmentation</td><td>Functional</td><td>§6.5</td><td>Medium</td></tr>
+<tr><td><strong>R2.5</strong></td><td>Haemorrhage classification</td><td>Functional</td><td>§6.5</td><td>Medium</td></tr>
+<tr><td><strong>R2.6</strong></td><td>Neovascularisation detection</td><td>Functional</td><td>§6.6</td><td><strong>High &mdash; data gap, see §17.1</strong></td></tr>
+<tr><td><strong>R3.1</strong></td><td>Classify on ICDR scale, Levels 0&ndash;4</td><td>Functional</td><td>§7.3</td><td>Low</td></tr>
+<tr><td><strong>R3.2</strong></td><td>&gt;90% sensitivity for referable DR (Level 2+)</td><td>Performance</td><td>§11.2</td><td><strong>High</strong></td></tr>
+<tr><td><strong>R3.3</strong></td><td>&gt;85% specificity for referable DR</td><td>Performance</td><td>§11.2</td><td><strong>High</strong></td></tr>
+<tr><td><strong>R4.1</strong></td><td>Grad-CAM attention maps</td><td>Functional</td><td>§8.2</td><td>Low</td></tr>
+<tr><td><strong>R4.2</strong></td><td>Lesion-level evidence correlated with clinical criteria</td><td>Functional</td><td>§8.4</td><td>Medium</td></tr>
+<tr><td><strong>R4.3</strong></td><td>Calibrated confidence scores</td><td>Functional</td><td>§7.6</td><td>Low</td></tr>
+<tr><td><strong>R4.4</strong></td><td>Automated annotated reports</td><td>Functional</td><td>§8.7</td><td>Low</td></tr>
+<tr><td><strong>R4.5</strong></td><td>Ophthalmologist validation in under 30 seconds, human-in-the-loop</td><td>Performance</td><td>§12</td><td>Medium</td></tr>
+<tr><td><strong>R5.1</strong></td><td>Simulink model of telemedicine pipeline: acquisition rates, bandwidth, throughput, review capacity</td><td>Functional</td><td>§9.3</td><td>Low</td></tr>
+<tr><td><strong>R5.2</strong></td><td>Optimise resource allocation for district programmes serving 100,000+ patients annually</td><td>Functional</td><td>§9.5</td><td>Low</td></tr>
+<tr><td><strong>R6.1</strong></td><td>Validation against published benchmarks</td><td>Evidence</td><td>§11.5</td><td>Medium</td></tr>
+<tr><td><strong>R6.2</strong></td><td>Demonstrate the integrated pipeline outperforms any single-technique approach</td><td>Evidence</td><td>§11.6</td><td>Medium</td></tr>
+<tr><td><strong>R6.3</strong></td><td>Grad-CAM outputs rated as clinically useful</td><td>Evidence</td><td>§12</td><td>Medium</td></tr>
+</tbody>
+</table>
+
+<h2>2.3 Reading R6.2 correctly</h2>
+
+<p>R6.2 is the requirement teams misread. "Outperforms any single-technique approach" is not rhetorical padding &mdash; it is an instruction to run an <strong>ablation study</strong>. You are being asked to build the components separately, measure them separately, then measure them combined, and show the combination wins.</p>
+
+<p>This has a direct architectural consequence and it is why §11.6 exists. We must be able to evaluate, on the same held-out data:</p>
+
+<ol>
+<li>Classifier alone, no quality gate, no lesion evidence.</li>
+<li>Classifier with quality gate.</li>
+<li>Lesion-rule grading alone (ICDR criteria applied to detected lesion counts, no CNN).</li>
+<li>Full integrated pipeline: quality gate + classifier + lesion evidence + deferral.</li>
+</ol>
+
+<p>Configuration 3 will almost certainly be the weakest on raw accuracy, and that is fine &mdash; its purpose is to be the interpretable reference, and its disagreements with configuration 1 are what drive the unexplained-prediction flag. The pipeline must therefore be built so that any stage can be switched off from a config file rather than by editing code. See §13.3.</p>
+
+<h2>2.4 Statistics quoted in the problem statement</h2>
+
+<p>The PS supplies its own framing statistics. Use these as primary in the pitch, because quoting the PS back demonstrates you read it. One supporting figure is worth adding to show you read past it.</p>
+
+<table>
+<thead><tr><th style="width:44%">Statistic</th><th style="width:14%">Source</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>India has over 77 million diabetic adults, second highest globally</td><td>PS text</td><td>Primary framing <span class="tag v">Verified</span> as PS content</td></tr>
+<tr><td>DR affects ~18% of this population</td><td>PS text</td><td>Primary framing <span class="tag v">Verified</span> as PS content</td></tr>
+<tr><td>Early screening can prevent 90% of vision loss</td><td>PS text</td><td>Primary framing <span class="tag v">Verified</span> as PS content</td></tr>
+<tr><td>~1 ophthalmologist per 100,000 rural population</td><td>PS text</td><td>Primary framing. This is the number that motivates §9's capacity model. <span class="tag v">Verified</span> as PS content</td></tr>
+<tr><td>~101 million adults with diabetes in India (ICMR-INDIAB)</td><td><em>Lancet Diabetes Endocrinol</em>, 2023</td><td>Supporting. Shows the PS's 77M figure is the older IDF estimate and the burden is larger still. <span class="tag u">Unverified</span> &mdash; check before use</td></tr>
+</tbody>
+</table>
+
+<div class="box">
+<p style="margin-bottom:0"><strong>Framing note for the pitch.</strong> The PS's own numbers already make the argument: roughly 77 million diabetic adults, ~18% with DR, and one ophthalmologist per 100,000 rural people. You do not need to embellish. Present the arithmetic, not adjectives.</p>
+</div>
+
+<h1>3. Clinical Foundations</h1>
+
+<p class="lead">You cannot defend a grading model without knowing the grading rules it is imitating. This section is the minimum clinical literacy every team member needs, and it is where most of the judge questions will come from.</p>
+
+<h2>3.1 What diabetic retinopathy is</h2>
+
+<p>Chronic hyperglycaemia damages the small blood vessels of the retina. The vessel walls weaken and leak, then occlude, starving areas of retina of oxygen. In response the retina releases growth factors that drive the formation of new, fragile vessels. Those vessels bleed into the vitreous and pull on the retina as they contract, which is the mechanism of severe vision loss.</p>
+
+<p>The clinically important consequence for us: <strong>DR is graded by counting and locating lesions, not by looking at the whole image holistically.</strong> That is why a lesion-grounded explanation is not merely a nice presentation choice &mdash; it mirrors the actual diagnostic procedure a human grader performs. <span class="tag k">Established</span></p>
+
+<h2>3.2 The lesions, in the order they appear</h2>
+
+<table>
+<thead><tr><th style="width:18%">Lesion</th><th style="width:9%">Abbr.</th><th style="width:14%">Appearance</th><th style="width:12%">Typical size</th><th>Significance</th></tr></thead>
+<tbody>
+<tr><td>Microaneurysm</td><td>MA</td><td>Small round red dot</td><td><strong>~10&ndash;100 &micro;m</strong></td><td>The earliest visible sign. MAs alone define Mild NPDR. This is the hardest object in the whole problem and it drives our entire resolution strategy.</td></tr>
+<tr><td>Dot / blot haemorrhage</td><td>HE</td><td>Red, irregular, larger than MA</td><td>~100&ndash;500 &micro;m</td><td>Counting haemorrhages per quadrant is central to the severe-NPDR rule.</td></tr>
+<tr><td>Hard exudate</td><td>EX</td><td>Yellow, sharp-edged, waxy</td><td>Variable</td><td>Lipid deposits from leaking vessels. Near the fovea, implies macular oedema.</td></tr>
+<tr><td>Soft exudate / cotton-wool spot</td><td>SE</td><td>Pale, fluffy, indistinct edges</td><td>Variable</td><td>Nerve-fibre-layer infarcts. Marker of ischaemia.</td></tr>
+<tr><td>Venous beading</td><td>VB</td><td>Sausage-like vein calibre variation</td><td>Vessel-scale</td><td>Part of the severe-NPDR rule. Requires vessel segmentation to assess.</td></tr>
+<tr><td>Intraretinal microvascular abnormality</td><td>IRMA</td><td>Tortuous intraretinal vessel loops</td><td>Vessel-scale</td><td>Part of the severe-NPDR rule. Very hard to distinguish from neovascularisation.</td></tr>
+<tr><td>Neovascularisation</td><td>NV</td><td>Fine new vessel networks, often at the disc</td><td>Vessel-scale</td><td>Defines Proliferative DR. Sight-threatening. <strong>No pixel-level ground truth exists in our named datasets &mdash; see §17.1.</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The microaneurysm resolution problem &mdash; read this before choosing any input size</h4>
+<p>A microaneurysm can be as small as ~10&nbsp;&micro;m. In a fundus photograph, that is on the order of a handful of pixels at native camera resolution, and it becomes <em>sub-pixel</em> at the input sizes CNNs conventionally use.</p>
+<p>Consider what actually happens with a standard pipeline. An IDRiD image is 4288&times;2848. Resize it to the ResNet-50 default of 224&times;224 and you have shrunk it by a factor of roughly 19 in each dimension. A 20-pixel microaneurysm becomes approximately one pixel. It is not that the model finds this hard &mdash; <strong>the evidence has been destroyed before the model ever sees it.</strong></p>
+<p style="margin-bottom:0">This single fact drives three decisions later in this document: the classifier operates at high input resolution (§7.2), lesion segmentation is patch-based at native resolution rather than on downsampled whole images (§6.4), and Grad-CAM's coarse output is explicitly acknowledged as insufficient for MA localisation rather than being oversold (§8.3).</p>
+</div>
+
+<h2>3.3 The ICDR severity scale</h2>
+
+<p>The PS mandates the International Clinical Diabetic Retinopathy severity scale, Levels 0&ndash;4. These are the rules our Level&nbsp;0&ndash;4 output must correspond to. <span class="tag k">Established</span></p>
+
+<table>
+<thead><tr><th style="width:8%">Level</th><th style="width:24%">Name</th><th>Definition</th><th style="width:14%">Referable?</th></tr></thead>
+<tbody>
+<tr><td><strong>0</strong></td><td>No apparent retinopathy</td><td>No abnormalities</td><td>No</td></tr>
+<tr><td><strong>1</strong></td><td>Mild NPDR</td><td>Microaneurysms only</td><td>No</td></tr>
+<tr><td><strong>2</strong></td><td>Moderate NPDR</td><td>More than microaneurysms only, but less than severe NPDR</td><td><strong>Yes</strong></td></tr>
+<tr><td><strong>3</strong></td><td>Severe NPDR</td><td>Any of the <strong>4-2-1 rule</strong> below, with no signs of proliferative disease</td><td><strong>Yes</strong></td></tr>
+<tr><td><strong>4</strong></td><td>Proliferative DR</td><td>Neovascularisation, and/or vitreous or preretinal haemorrhage</td><td><strong>Yes</strong></td></tr>
+</tbody>
+</table>
+
+<h3>The 4-2-1 rule (defines Level 3)</h3>
+<p>Severe NPDR is diagnosed if <em>any one</em> of the following is present: <span class="tag k">Established</span></p>
+<ul>
+<li><strong>4</strong> &mdash; more than 20 intraretinal haemorrhages in each of all four quadrants; <em>or</em></li>
+<li><strong>2</strong> &mdash; definite venous beading in two or more quadrants; <em>or</em></li>
+<li><strong>1</strong> &mdash; prominent IRMA in one or more quadrants.</li>
+</ul>
+
+<div class="box ok">
+<h4>Why the 4-2-1 rule is the backbone of our explainability module</h4>
+<p style="margin-bottom:0">Notice what the rule is made of: <strong>counts of specific lesions within specific spatial regions</strong>. That is precisely what a lesion segmentation model produces. This means our lesion-evidence channel (§8.4) is not an approximation of clinical reasoning invented for a hackathon &mdash; it is a direct computational restatement of the published grading criterion. When a judge asks "how do you know your explanation is clinically meaningful?", the answer is: because it is expressed in the same terms as the diagnostic standard, and here is the rule it evaluates.</p>
+</div>
+
+<h2>3.4 Referable DR: the endpoint that actually matters</h2>
+
+<p>The PS sets its performance targets on <strong>referable DR, defined as Level 2 or above</strong>. This matches international screening practice and is the endpoint used by regulator-cleared autonomous systems. The screening question is not "what grade is this?" but "does this person need to see an ophthalmologist?"</p>
+
+<p>This asymmetry must shape every evaluation decision we make:</p>
+
+<table>
+<thead><tr><th style="width:22%">Error</th><th style="width:30%">Consequence</th><th>Implication</th></tr></thead>
+<tbody>
+<tr><td><strong>False negative</strong><br>(missed referable DR)</td><td>Patient is told they are fine and does not return for a year. Disease progresses. Potentially irreversible vision loss.</td><td>Catastrophic and irreversible. This is why the PS sets the sensitivity bar (&gt;90%) higher than the specificity bar (&gt;85%).</td></tr>
+<tr><td><strong>False positive</strong></td><td>Patient is referred unnecessarily. One wasted specialist appointment; patient travel and time cost.</td><td>Costly but recoverable. Quantifiable &mdash; and in §9 we actually quantify it, in grader-hours per year.</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Never report bare accuracy</h4>
+<p style="margin-bottom:0">In APTOS, roughly half the images are Level 0. A model that predicts "no DR" for every image scores respectably on accuracy while being clinically worthless and dangerous. Any result in this project that is reported as a single accuracy figure is, by team policy, an invalid result. §11 defines what we report instead. This is also the failure mode most likely to slip past an AI-assisted workflow silently, because a model that learns the majority class throws no error &mdash; see §13.4.</p>
+</div>
+
+<h2>3.5 Benchmark performance from cleared systems</h2>
+
+<p>These give context for how hard the PS targets are. Regulator-cleared autonomous DR screening systems provide the realistic comparison. <span class="tag u">Unverified &mdash; confirm figures before citing</span></p>
+
+<table>
+<thead><tr><th style="width:26%">System</th><th style="width:16%">Sensitivity</th><th style="width:16%">Specificity</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>IDx-DR (pivotal trial)</td><td>87.2%</td><td>90.7%</td><td>First FDA De Novo authorised autonomous DR system (2018)</td></tr>
+<tr><td>EyeArt (pivotal)</td><td>~96%</td><td>~88%</td><td>FDA 510(k), 2020</td></tr>
+<tr><td><strong>SIH26038 target</strong></td><td><strong>&gt;90%</strong></td><td><strong>&gt;85%</strong></td><td>Set by the PS</td></tr>
+</tbody>
+</table>
+
+<p>Read that table carefully, because it contains an important and slightly uncomfortable message. <strong>The PS's sensitivity target exceeds what IDx-DR achieved in its pivotal trial.</strong> These targets are achievable on an internal test split of a single dataset. They are considerably harder on a genuinely external dataset from different cameras and a different population. §11.4 explains how we handle that honestly rather than by quietly reporting only the internal number.</p>
+
+<h1>4. System Architecture</h1>
+
+<h2>4.1 Pipeline overview</h2>
+
+<div class="ascii">
+                        ┌──────────────────────────────────────────┐
+   Fundus image  ─────► │  C1  IMAGE QUALITY ASSESSMENT            │
+   (portable camera)    │      FOV mask · focus · illumination     │
+                        │      · artefact · field definition       │
+                        └────────────┬─────────────────────────────┘
+                                     │
+                  ┌──────────────────┼──────────────────┐
+             REJECT              ENHANCE             GRADABLE
+                  │                  │                  │
+                  ▼                  ▼                  │
+        ┌──────────────────┐  ┌─────────────┐           │
+        │ Recapture advice │  │ CLAHE +     │           │
+        │ "too dark"       │  │ illum. norm │───────────┤
+        │ "out of focus"   │  │ + denoise   │           │
+        └──────────────────┘  └─────────────┘           │
+                  ▲                                     ▼
+                  │              ┌──────────────────────────────────┐
+                  │              │  C2  STRUCTURE SEGMENTATION      │
+                  │              │  optic disc · fovea · vessels    │
+                  │              │  MA · HE · EX · SE               │
+                  │              └────────────┬─────────────────────┘
+                  │                           │
+                  │              ┌────────────▼─────────────────────┐
+                  │              │  C3  DR SEVERITY GRADING         │
+                  │              │  ICDR 0–4 · calibrated conf.     │
+                  │              │  · uncertainty estimate          │
+                  │              └────────────┬─────────────────────┘
+                  │                           │
+                  │              ┌────────────▼─────────────────────┐
+                  │              │  C4  EXPLAINABILITY              │
+                  │              │  Grad-CAM ‖ lesion evidence      │
+                  │              │  ‖ ICDR rule trace ‖ report      │
+                  │              └────────────┬─────────────────────┘
+                  │                           │
+                  │              ┌────────────▼─────────────────────┐
+                  │              │  DECISION + DEFERRAL LOGIC       │
+                  │              │  auto-clear │ refer │ ESCALATE   │
+                  │              └────────────┬─────────────────────┘
+                  │                           │
+                  └───────────────────────────┤
+                                              ▼
+                        ┌──────────────────────────────────────────┐
+                        │  C5  SimEvents DISTRICT CAPACITY MODEL   │
+                        │  arrivals · bandwidth · grader pool      │
+                        │  · queueing · turnaround · utilisation   │
+                        └──────────────────────────────────────────┘
+</div>
+
+<h2>4.2 The three-way decision, and why deferral is a first-class output</h2>
+
+<p>Most DR classifiers emit two outcomes: refer or do not refer. Ours emits three.</p>
+
+<table>
+<thead><tr><th style="width:18%">Outcome</th><th style="width:32%">Triggered when</th><th>Action at the PHC</th></tr></thead>
+<tbody>
+<tr><td><strong>Auto-clear</strong></td><td>Confident Level 0&ndash;1, lesion evidence agrees, image quality good</td><td>Patient advised of routine annual re-screening. No specialist time consumed.</td></tr>
+<tr><td><strong>Refer</strong></td><td>Level 2+ predicted, and lesion evidence supports it</td><td>Referral slip printed with annotated image and the ICDR criterion that fired.</td></tr>
+<tr><td><strong>Escalate</strong><br>(human grading required)</td><td>Model uncertainty above threshold, <em>or</em> Grad-CAM and lesion evidence disagree, <em>or</em> image quality borderline</td><td>Image queued for remote human grader. This is the human-in-the-loop path the PS requires under R4.5.</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>Design rationale: the "unexplained prediction" flag</h4>
+<p>This is the mechanism we consider the most defensible original contribution in the design, and it is worth being able to explain fluently.</p>
+<p>If the CNN predicts referable DR but the lesion detector finds no microaneurysms, no haemorrhages and no exudates, then one of two things is true: either the lesion detector missed something, or <strong>the classifier is keying on something that is not disease</strong>. The second case is a well-documented failure mode in retinal imaging &mdash; models learn camera artefacts, image borders, and laterality rather than pathology.</p>
+<p style="margin-bottom:0">Either way, the case is one a human should see. Standard post-hoc XAI would generate a heatmap for this prediction and present it as a justification, which is actively misleading. Our design detects the condition and refuses to auto-decide. <strong>This converts explainability from a presentation layer into a runtime safety control</strong>, and it is measurable: §11.7 defines the disagreement-rate metric.</p>
+</div>
+
+<h2>4.3 Deployment context</h2>
+
+<p>The PS specifies deployment "in primary healthcare centres across rural India" with "portable fundus cameras in field conditions." That setting imposes constraints, and each constraint has a concrete design consequence:</p>
+
+<table>
+<thead><tr><th style="width:30%">Field reality</th><th>Design consequence</th></tr></thead>
+<tbody>
+<tr><td>Operator is a health worker, not an ophthalmologist</td><td>Explanations must be readable without specialist training. The referral slip states a plain-language reason and the ICDR criterion, not a bare probability.</td></tr>
+<tr><td>Handheld/portable cameras, uncontrolled lighting</td><td>Quality gate is mandatory and runs first. Performance reported stratified by quality tier (§11.3).</td></tr>
+<tr><td>Intermittent or absent connectivity</td><td>Inference must run locally. Model size and inference latency are budgeted, not incidental. Store-and-forward queue when the link is down &mdash; modelled explicitly in §9.</td></tr>
+<tr><td>Patient may not return</td><td>Result must be produced during the visit. This sets the end-to-end latency target that §9 optimises against.</td></tr>
+<tr><td>Limited specialist capacity downstream</td><td>Every false positive consumes scarce grader time. §9 quantifies this in grader-hours per year and finds the operating point that respects it.</td></tr>
+</tbody>
+</table>
+
+<h2>4.4 Toolbox mapping</h2>
+
+<p>The PS names six MathWorks products. Depth of toolbox use is a scoring dimension in a MathWorks problem statement, so this mapping is deliberate rather than incidental.</p>
+
+<table class="tight">
+<thead><tr><th style="width:26%">Product</th><th style="width:12%">Component</th><th>Principal use</th></tr></thead>
+<tbody>
+<tr><td>Image Processing Toolbox</td><td>C1, C2</td><td>FOV masking, <code>adapthisteq</code> (CLAHE), morphological lesion candidate detection, denoising, illumination normalisation</td></tr>
+<tr><td>Computer Vision Toolbox</td><td>C2</td><td>Semantic segmentation networks, labelling and evaluation utilities</td></tr>
+<tr><td>Deep Learning Toolbox</td><td>C2, C3, C4</td><td><code>trainnet</code>, <code>dlnetwork</code>, <code>imagePretrainedNetwork</code>, and the three XAI functions: <code>gradCAM</code>, <code>imageLIME</code>, <code>occlusionSensitivity</code> <span class="tag v">Verified</span></td></tr>
+<tr><td>Medical Imaging Toolbox</td><td>C2, C4</td><td>Medical image datastores, annotation and visualisation of clinical overlays</td></tr>
+<tr><td>Statistics and Machine Learning Toolbox</td><td>C1, C3, C4</td><td>Quality-tier classifier, probability calibration, confidence intervals, ROC analysis</td></tr>
+<tr><td>Simulink + <strong>SimEvents</strong></td><td>C5</td><td>Discrete-event district capacity model. SimEvents supplies Entity Generator, Queue, Server, Resource Pool / Acquirer / Releaser and statistics blocks <span class="tag v">Verified</span></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Licensing note &mdash; act on this immediately</h4>
+<p style="margin-bottom:0">The $99 MATLAB and Simulink Student Suite <strong>does not include</strong> Deep Learning Toolbox, Computer Vision Toolbox, Medical Imaging Toolbox or SimEvents <span class="tag v">Verified</span>. Also note that <strong>Parallel Computing Toolbox</strong> is what enables GPU training and is not named in the PS tool list &mdash; omit it from your trial selection and you will train on CPU without understanding why everything is slow. See §14.1 for the licensing path.</p>
+</div>
+
+<h1>5. Component 1 &mdash; Image Quality Assessment and Enhancement</h1>
+
+<p class="lead">Discharges R1.1, R1.2, R1.3. This is the component to build first: it requires no training, no GPU and no labelled data, and it is the PS's own stated differentiator against existing solutions.</p>
+
+<h2>5.1 Why this comes first</h2>
+
+<p>A deployed Google DR screening system in Thai clinics had a substantial fraction of images rejected for quality in field conditions, a finding reported in a human-centred evaluation study at CHI 2020. <span class="tag u">Unverified &mdash; confirm the exact rejection percentage before citing</span> The general lesson is robust and is exactly what the PS asserts: <strong>models that perform well on curated datasets degrade in the field primarily because of image quality, not because of the model.</strong></p>
+
+<p>Building the gate first also has a practical benefit for a four-day demo: it is entirely classical computer vision, so it produces a working, demonstrable stage on day one while the classifier is still training.</p>
+
+<h2>5.2 Quality metrics (R1.1)</h2>
+
+<p>All metrics are computed <strong>inside the field-of-view mask only</strong>. This matters: the black surround of a fundus image would otherwise dominate every intensity statistic and make the measures meaningless.</p>
+
+<h3>Step 1 &mdash; Field-of-view mask</h3>
+<p>Threshold the image to separate the illuminated circular retina from the black border, take the largest connected component, fill holes, and fit a circle. The mask is reused by every downstream stage, so compute it once and cache it.</p>
+<pre><code>% Approximate structure; tune thresholds per camera
+gray = im2gray(I);
+bw   = imbinarize(gray, 0.05);        % retina vs black surround
+bw   = imfill(bw, 'holes');
+bw   = bwareafilt(bw, 1);             % largest component only
+stats = regionprops(bw, 'Centroid', 'EquivDiameter', 'BoundingBox');
+fovMask   = bw;
+fovRadius = stats.EquivDiameter / 2;</code></pre>
+
+<h3>Step 2 &mdash; Quantitative quality features</h3>
+
+<table>
+<thead><tr><th style="width:20%">Feature</th><th style="width:14%">Targets</th><th>Method</th></tr></thead>
+<tbody>
+<tr><td><strong>Focus</strong></td><td>Blur, defocus</td><td>Variance of the Laplacian computed within the FOV mask. Also compute Tenengrad (sum of squared Sobel gradient magnitudes) as a second, less noise-sensitive estimator. Low values indicate blur.</td></tr>
+<tr><td><strong>Illumination uniformity</strong></td><td>Uneven flash, vignetting</td><td>Estimate the background by heavy Gaussian or median filtering, then compute the coefficient of variation of that background across the four ETDRS quadrants. High variation indicates uneven illumination.</td></tr>
+<tr><td><strong>Global exposure</strong></td><td>Under/over-exposure</td><td>Mean and percentile intensities within FOV; fraction of saturated pixels (blown highlights) and fraction of near-black pixels.</td></tr>
+<tr><td><strong>Contrast</strong></td><td>Washed-out images</td><td>RMS contrast and Shannon entropy of the green channel within FOV. The green channel carries most retinal lesion contrast. <span class="tag k">Established</span></td></tr>
+<tr><td><strong>Field definition</strong></td><td>Wrong field, off-centre</td><td>Requires that the optic disc is detected (§6.2) and that the estimated fovea position lies within the FOV. A macula-centred field is the screening standard.</td></tr>
+<tr><td><strong>Artefacts</strong></td><td>Dust, lens flare, eyelashes</td><td>Detect anomalously bright small blobs and high-frequency arc structures near the FOV boundary.</td></tr>
+</tbody>
+</table>
+
+<h2>5.3 Quality classifier</h2>
+
+<p>The features above feed a small classifier producing three classes: <strong>gradable</strong>, <strong>borderline (enhance and retry)</strong>, <strong>ungradable (reject)</strong>.</p>
+
+<p>Use <code>fitcecoc</code> or a decision tree from Statistics and Machine Learning Toolbox rather than a neural network. Three reasons, and they are all worth being able to say out loud:</p>
+<ol>
+<li>The feature set is small and hand-designed, so a deep model has nothing to add.</li>
+<li>A decision tree is itself interpretable, which is consistent with the project's thesis. The quality gate can state <em>which</em> feature caused a rejection, and that is precisely what generates the recapture message in §5.5.</li>
+<li>It trains on a few hundred hand-labelled examples in seconds on CPU.</li>
+</ol>
+
+<p><strong>Labels.</strong> Hand-label roughly 300&ndash;400 APTOS images into the three tiers. This is a two-hour task for two people and needs no clinical training &mdash; "can you see the retina clearly enough to look for small red dots?" is the operative question. Record the labelling protocol in the repository so it is reproducible.</p>
+
+<h2>5.4 Enhancement (R1.2)</h2>
+
+<p>Applied only to borderline images. Order matters.</p>
+
+<table>
+<thead><tr><th style="width:8%">#</th><th style="width:28%">Operation</th><th>Detail</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Illumination normalisation</td><td>Estimate the slowly varying background with a large-kernel filter and subtract it, then re-centre. Removes vignetting and uneven flash without touching lesion-scale detail.</td></tr>
+<tr><td>2</td><td>CLAHE</td><td><code>adapthisteq</code> applied to the green channel, or to the L channel in Lab space to preserve colour relationships. Contrast-limited so it does not amplify noise into false lesions.</td></tr>
+<tr><td>3</td><td>Denoising</td><td><code>imnlmfilt</code> (non-local means). Applied conservatively &mdash; over-denoising erases microaneurysms, which are exactly the small dark dots a denoiser wants to remove.</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Self-inflicted domain shift &mdash; the most likely silent bug in this component</h4>
+<p style="margin-bottom:0">If enhancement is applied at inference but not during training, you have created a distribution mismatch with your own hands, and the model will underperform for a reason no metric will name. <strong>Rule: the enhancement decision is part of the pipeline, and the pipeline is identical at training and inference time.</strong> Both must run the same gate and apply the same enhancement to the same category of image. Encode this by having exactly one preprocessing function, called from both paths. Never two.</p>
+</div>
+
+<h2>5.5 Recapture feedback (R1.3)</h2>
+
+<p>Rejection alone is not what the PS asks for. It asks for rejection "with recapture feedback" &mdash; the system must tell the operator what to fix. Because the quality classifier is a tree over named features, the dominant failing feature is directly recoverable and maps to an instruction:</p>
+
+<table class="tight">
+<thead><tr><th style="width:28%">Dominant failing feature</th><th style="width:34%">Operator message</th><th>Corrective action</th></tr></thead>
+<tbody>
+<tr><td>Low Laplacian variance</td><td>"Image out of focus"</td><td>Refocus; ask patient to fixate on the target</td></tr>
+<tr><td>Low mean intensity</td><td>"Image too dark"</td><td>Increase flash intensity; check pupil dilation</td></tr>
+<tr><td>High saturated fraction</td><td>"Image over-exposed"</td><td>Reduce flash intensity</td></tr>
+<tr><td>High quadrant illumination CV</td><td>"Uneven lighting"</td><td>Re-align camera to the eye; check working distance</td></tr>
+<tr><td>Optic disc not detected / fovea outside FOV</td><td>"Macula not centred"</td><td>Re-aim; the macula should be near the image centre</td></tr>
+<tr><td>Bright arc near boundary</td><td>"Lens flare or eyelash"</td><td>Ask patient to open the eye wider; clean the lens</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>Demo value</h4>
+<p style="margin-bottom:0">This table is one of the strongest live-demo moments available to you, and it costs almost nothing to build. Feed the system a deliberately defocused image and watch it say "Image out of focus &mdash; refocus and retake" instead of confidently grading noise. It directly demonstrates the PS's own complaint that existing systems "fail with variable image quality," and it visibly does something about it.</p>
+</div>
+
+<h1>6. Component 2 &mdash; Retinal Structure Segmentation</h1>
+
+<p class="lead">Discharges R2.1&ndash;R2.6. This is the component that makes lesion-level explanation possible, and it is also where the honest limits of the available data must be stated.</p>
+
+<h2>6.1 Two-track strategy</h2>
+
+<p>Every structure below is addressed on two tracks, and this is a deliberate risk-management decision rather than indecision:</p>
+
+<table>
+<thead><tr><th style="width:20%">Track</th><th style="width:26%">Nature</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><strong>Track A &mdash; Classical</strong></td><td>Morphology, filtering, geometric priors. No training.</td><td>Works on day one. Provides a functioning demo before any model has converged, and remains the fallback if a segmentation model fails to train usefully on small data.</td></tr>
+<tr><td><strong>Track B &mdash; Learned</strong></td><td>Patch-based semantic segmentation networks trained on IDRiD and DRIVE.</td><td>Higher ceiling. The version presented at the grand finale.</td></tr>
+</tbody>
+</table>
+
+<p>Track A is not a placeholder to be embarrassed about. Classical morphological microaneurysm detection is a genuine, long-established line of work in retinal image analysis, and having a non-learned baseline to compare against is itself part of the ablation R6.2 demands.</p>
+
+<h2>6.2 Optic disc and fovea localisation (R2.1)</h2>
+
+<p><strong>Track A.</strong> The optic disc is the brightest large structure in a normal fundus image and is the point of vessel convergence. Locate candidate bright regions of approximately disc size within the FOV, then disambiguate using vessel density, since vessels radiate from the disc.</p>
+
+<p>The fovea is then found geometrically. It sits approximately 2.5 disc diameters temporal to the disc centre, roughly on the horizontal axis through the disc. <span class="tag k">Established</span> Refine by searching that neighbourhood for the darkest avascular region.</p>
+
+<p><strong>Track B.</strong> IDRiD provides optic disc masks and fovea centre coordinates, so a small U-Net for the disc and a coordinate-regression head for the fovea are both directly trainable.</p>
+
+<p><strong>Why we need these at all.</strong> Three downstream uses, and a judge may well ask: field-definition checking in the quality gate (§5.2); quadrant definition for the 4-2-1 rule, which is defined relative to the disc-fovea axis (§8.5); and exudate disambiguation, since the optic disc is bright and yellow and is the classic false positive for hard exudate detection.</p>
+
+<h2>6.3 Vessel segmentation (R2.2)</h2>
+
+<p><strong>Dataset:</strong> DRIVE, 40 images with expert vessel annotations, conventionally split 20 train / 20 test. <span class="tag u">Unverified &mdash; confirm split sizes on download</span></p>
+
+<p><strong>Approach:</strong> patch-based U-Net on the green channel. Forty images is very few for whole-image training, but extracting overlapping patches yields tens of thousands of training samples, which is ample. This is the standard approach for DRIVE and is why a 40-image dataset remains usable.</p>
+
+<p><strong>Metrics:</strong> sensitivity, specificity and AUC against the expert masks, which are the conventional DRIVE benchmark measures and let us compare to published results as R6.1 requires.</p>
+
+<p><strong>Downstream uses:</strong> venous beading assessment for the 4-2-1 rule; vessel masking to suppress false lesion detections, since dark vessel segments are readily mistaken for haemorrhages; and neovascularisation features (§6.6).</p>
+
+<h2>6.4 Microaneurysm detection (R2.3) &mdash; the hard one</h2>
+
+<div class="box warn">
+<h4>Set expectations honestly here</h4>
+<p style="margin-bottom:0">The PS asks for "sub-pixel microaneurysm detection." Take that phrase seriously rather than treating it as flourish: it is telling you that MAs are at or below the effective resolution of a naively downsampled pipeline. IDRiD's segmentation subset provides on the order of a few dozen images with MA masks. <span class="tag u">Unverified &mdash; confirm exact counts on download</span> This is a very small training set for a very small object. <strong>Plan for this to be the component that most nearly fails, and build Track A so that it cannot fail completely.</strong></p>
+</div>
+
+<h3>Track A &mdash; morphological candidate detection</h3>
+<p>The classical pipeline, which needs no training data at all:</p>
+<ol>
+<li>Take the inverted green channel, where MAs appear as small bright peaks.</li>
+<li>Apply morphological top-hat with <strong>linear structuring elements at multiple orientations</strong>. Elongated structures (vessels) survive at least one orientation and are suppressed; small round structures (MAs) do not, and are retained. This is the key trick and it exploits the shape difference directly.</li>
+<li>Threshold to obtain candidates.</li>
+<li>Extract per-candidate features: area, eccentricity, peak intensity, local contrast, distance to nearest vessel.</li>
+<li>Classify candidates as MA or not with a small model from Statistics and Machine Learning Toolbox.</li>
+</ol>
+
+<h3>Track B &mdash; patch-based segmentation at native resolution</h3>
+<table class="tight">
+<thead><tr><th style="width:24%">Decision</th><th style="width:26%">Choice</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Input scale</td><td><strong>Native resolution patches</strong> (e.g. 512&times;512 crops from the full ~4288&times;2848 image)</td><td>Downsampling the whole image destroys the target. This is non-negotiable, see §3.2.</td></tr>
+<tr><td>Loss function</td><td>Dice + focal, or Tversky weighted toward recall</td><td>MA pixels are a vanishingly small fraction of all pixels. Plain cross-entropy converges to predicting all-background and reports excellent loss while detecting nothing.</td></tr>
+<tr><td>Primary metric</td><td><strong>Area under the precision-recall curve</strong></td><td>With extreme class imbalance, ROC-AUC looks impressive and means little. AUPR is the metric used for the IDRiD lesion segmentation benchmark. <span class="tag u">Unverified &mdash; confirm</span></td></tr>
+<tr><td>Augmentation</td><td>Flips, rotations, modest colour/brightness jitter</td><td>Compensates for tiny training set. Avoid heavy blur or noise augmentation, which destroys the target class.</td></tr>
+<tr><td>Sampling</td><td>Oversample patches containing lesions</td><td>Random patches from a fundus image are almost all lesion-free.</td></tr>
+</tbody>
+</table>
+
+<h2>6.5 Haemorrhages, hard exudates, soft exudates (R2.4, R2.5)</h2>
+
+<p>Same patch-based approach as §6.4 Track B, trained on the corresponding IDRiD masks. These are substantially easier than MAs because the objects are larger.</p>
+
+<table>
+<thead><tr><th style="width:18%">Class</th><th style="width:30%">Discriminating cue</th><th>Principal false-positive source and mitigation</th></tr></thead>
+<tbody>
+<tr><td>Haemorrhage</td><td>Dark red, irregular boundary</td><td>Vessel segments. Mitigate by suppressing detections that overlap the vessel mask from §6.3.</td></tr>
+<tr><td>Hard exudate</td><td>Bright yellow, sharp edges</td><td>The optic disc. Mitigate by excluding the disc region from §6.2.</td></tr>
+<tr><td>Soft exudate</td><td>Pale, fluffy, indistinct edges</td><td>Hard exudates. Separate on edge sharpness and colour saturation.</td></tr>
+</tbody>
+</table>
+
+<p>Note the dependency structure this creates: vessel and disc segmentation are not independent deliverables, they are inputs that materially improve lesion precision. That interdependence is itself part of the R6.2 argument that the integrated pipeline beats any single technique &mdash; and it is measurable by running lesion detection with and without the vessel/disc suppression.</p>
+
+<h2>6.6 Neovascularisation (R2.6) &mdash; declared data gap</h2>
+
+<div class="box warn">
+<h4>State this plainly rather than pretending</h4>
+<p><strong>None of the four datasets named in the PS provides pixel-level neovascularisation annotations.</strong> IDRiD supplies image-level grades that include proliferative DR, and it supplies pixel masks for MA, HE, EX and SE &mdash; but not for NV. We therefore cannot train a supervised NV segmenter on the named data, and we will not claim to have done so.</p>
+<p style="margin-bottom:0"><strong>What we do instead, and say we do:</strong></p>
+</div>
+
+<ol>
+<li><strong>Image-level PDR detection via the classifier.</strong> Level 4 is one of the five ICDR classes the grading model outputs, so proliferative disease is detected at image level even without lesion-level NV masks.</li>
+<li><strong>Vessel-morphology proxy features.</strong> From the vessel segmentation, compute abnormal branching density, tortuosity and calibre irregularity, particularly within one disc diameter of the optic disc where disc neovascularisation characteristically occurs. Report these as <em>supporting indicators</em>, explicitly not as a validated NV detector.</li>
+<li><strong>Route to a human.</strong> Any predicted Level 4 is escalated for human grading regardless of confidence. Proliferative DR is sight-threatening and comparatively rare, so the cost of always escalating it is small and the cost of an autonomous miss is severe.</li>
+</ol>
+
+<p>This is the correct engineering answer <em>and</em> the correct presentation answer. A judge who knows these datasets knows there are no NV masks in them. A team that claims a trained NV segmenter is either mistaken or has quietly used data they have not declared. A team that names the gap, explains the mitigation, and escalates the risky class is demonstrating exactly the "clinical validation rigor" the PS says the field lacks.</p>
+
+<h1>7. Component 3 &mdash; DR Severity Grading</h1>
+
+<p class="lead">Discharges R3.1, R3.2, R3.3, R4.3. The classifier is the least novel part of this project and the part most teams spend all their time on. Budget accordingly.</p>
+
+<h2>7.1 Backbone selection</h2>
+
+<table>
+<thead><tr><th style="width:24%">Decision</th><th style="width:26%">Choice</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Architecture</td><td>ResNet-50 initially; EfficientNet as a comparison if time allows</td><td>Pretrained and available through <code>imagePretrainedNetwork</code>. Well understood, and <code>gradCAM</code> works cleanly on its final convolutional block.</td></tr>
+<tr><td>Initialisation</td><td>ImageNet pretrained weights, fine-tuned</td><td>~6,000 total images across the named datasets is far too few to train from scratch.</td></tr>
+<tr><td>Input resolution</td><td><strong>448&times;448 minimum, 512&times;512 preferred</strong></td><td>The default 224&times;224 destroys microaneurysm evidence (§3.2). This is the single most consequential hyperparameter in the project.</td></tr>
+<tr><td>Batch size</td><td>8&ndash;16, tuned to fit 6&nbsp;GB VRAM</td><td>Constrained by the RTX 3050. If unstable, reduce batch size before reducing resolution &mdash; resolution is worth more here.</td></tr>
+</tbody>
+</table>
+
+<h2>7.2 Preprocessing</h2>
+
+<ol>
+<li><strong>Crop to the FOV bounding box</strong> using the mask from §5.2, removing the black surround. Without this, a large fraction of every input tensor is uninformative black pixels.</li>
+<li><strong>Resize to a fixed square</strong> at the chosen resolution.</li>
+<li><strong>Local colour normalisation.</strong> Subtracting a heavily blurred version of the image from itself, then re-centring, substantially normalises illumination and colour differences between cameras. This technique is strongly associated with top solutions in the original Kaggle DR competition. <span class="tag u">Unverified attribution &mdash; describe the method, do not attribute it to a named individual without checking</span></li>
+<li><strong>Per-channel standardisation</strong> using training-set statistics.</li>
+</ol>
+
+<p>Steps 1&ndash;4 are implemented in a <em>single shared function</em> used by both the training and inference paths, for the reason given in §5.4.</p>
+
+<h2>7.3 Output head (R3.1)</h2>
+
+<p>DR grades are <strong>ordinal</strong>, not categorical: confusing Level 0 with Level 4 is a far worse error than confusing Level 2 with Level 3. A plain 5-way softmax treats all confusions as equal and throws that structure away.</p>
+
+<table>
+<thead><tr><th style="width:26%">Option</th><th>Assessment</th></tr></thead>
+<tbody>
+<tr><td>5-class softmax</td><td>Simplest. Ignores ordinality. Adequate baseline.</td></tr>
+<tr><td>Regression + learned thresholds</td><td>Respects ordinality; historically strong on this task. Slightly awkward to interpret probabilistically, which matters for R4.3 calibration.</td></tr>
+<tr><td><strong>Ordinal (cumulative) encoding</strong> &mdash; four binary heads predicting P(grade &gt; 0), P(grade &gt; 1), P(grade &gt; 2), P(grade &gt; 3)</td><td><strong>Recommended.</strong> Respects ordinality, and the head P(grade &gt; 1) <em>is</em> the referable-DR probability &mdash; the exact quantity the PS sets its targets on. The primary endpoint becomes a direct model output rather than a post-hoc sum.</td></tr>
+</tbody>
+</table>
+
+<p>Ship the softmax baseline first, then the ordinal head, and report both. The comparison is a legitimate ablation contributing to R6.2.</p>
+
+<h2>7.4 Class imbalance</h2>
+
+<p>APTOS is markedly imbalanced, with Level 0 the dominant class and Levels 3 and 4 sparse. <span class="tag u">Unverified &mdash; compute the exact distribution from the downloaded CSV and record it here</span></p>
+
+<p>Handle it with, in order of preference: class-weighted loss; oversampling of minority classes in the training datastore; and augmentation applied more aggressively to minority classes. Do <em>not</em> attempt to fix imbalance by discarding Level 0 images &mdash; the deployment distribution is imbalanced too, and the model needs to see it.</p>
+
+<div class="box warn">
+<h4>Mandatory logging</h4>
+<p style="margin-bottom:0">Every training run in this project prints <strong>per-class recall and the full confusion matrix</strong> at every validation epoch. This is a hard requirement, not a nicety. A model that collapses to predicting the majority class produces a healthy-looking loss curve and a respectable accuracy figure, and raises no error at all. Per-class recall is the only cheap signal that catches it. See §13.4.</p>
+</div>
+
+<h2>7.5 Uncertainty estimation</h2>
+
+<p>Required for the deferral logic in §4.2. Two viable approaches:</p>
+
+<table>
+<thead><tr><th style="width:24%">Method</th><th style="width:16%">Cost</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><strong>MC dropout</strong></td><td>N forward passes at inference (N ≈ 20)</td><td>Keep dropout active at inference; the spread across passes estimates uncertainty. Single model, so no extra training cost. <strong>Recommended for the 6&nbsp;GB constraint.</strong></td></tr>
+<tr><td>Deep ensemble</td><td>3&ndash;5&times; training and storage</td><td>Generally better-calibrated uncertainty, but multiplies both training time and the on-device model footprint, which conflicts with offline PHC deployment.</td></tr>
+</tbody>
+</table>
+
+<p>Uncertainty score: predictive entropy of the mean predictive distribution across passes. Cases above a threshold are escalated. The threshold is not guessed &mdash; it is chosen from the risk-coverage curve (§11.4) and then fed into the SimEvents model (§9.5) as the parameter that determines grader workload.</p>
+
+<h2>7.6 Probability calibration (R4.3)</h2>
+
+<p>The PS asks for "calibrated confidence scores." Raw softmax output is <em>not</em> calibrated &mdash; modern neural networks are systematically overconfident. Presenting a softmax value as a confidence is one of the most common unforced errors in student ML projects, and it is easy to get right.</p>
+
+<h4>Method</h4>
+<ol>
+<li>Hold out a calibration split, distinct from both the training set and the test set.</li>
+<li>Fit a single temperature parameter <em>T</em> that minimises negative log-likelihood on that split, dividing the logits by <em>T</em> before the softmax.</li>
+<li>Report <strong>Expected Calibration Error</strong> before and after, and include a <strong>reliability diagram</strong> in the results.</li>
+</ol>
+
+<p>Temperature scaling is a one-parameter fit, takes minutes, and produces a defensible answer to "what does 0.87 mean?" &mdash; namely that among cases where the system reports 0.87, close to 87% genuinely are referable. That sentence, backed by a reliability diagram, is a strong judging moment.</p>
+
+<h1>8. Component 4 &mdash; Explainability Module</h1>
+
+<p class="lead">Discharges R4.1, R4.2, R4.4, and supports R6.2 and R6.3. This is the heart of the problem statement and the section Rithviksai should know best.</p>
+
+<h2>8.1 Three channels, deliberately</h2>
+
+<p>Read R4.1 and R4.2 together: the PS asks for Grad-CAM attention maps <em>and</em> lesion-level evidence correlated with clinical criteria. It asks for both because they are different kinds of explanation with different failure modes.</p>
+
+<table>
+<thead><tr><th style="width:20%">Channel</th><th style="width:16%">Question answered</th><th style="width:14%">Faithful to</th><th>Weakness</th></tr></thead>
+<tbody>
+<tr><td><strong>1. Grad-CAM</strong><br>(post-hoc)</td><td>"Where in the image did the network's decision come from?"</td><td>The model</td><td>Coarse spatial resolution; cannot localise microaneurysms. Explains the model whether or not the model is right.</td></tr>
+<tr><td><strong>2. Lesion evidence</strong><br>(inherently interpretable)</td><td>"What clinical findings are present, where, and how many?"</td><td>The clinical criteria</td><td>Depends on lesion detector quality; can miss findings the classifier picked up on.</td></tr>
+<tr><td><strong>3. ICDR rule trace</strong></td><td>"Which published criterion produces this grade from those findings?"</td><td>The guideline</td><td>Rule-based grade may disagree with the CNN grade.</td></tr>
+</tbody>
+</table>
+
+<p>Their disagreements are not a defect of the design. They are the signal (§8.6).</p>
+
+<h2>8.2 Channel 1 &mdash; Grad-CAM and post-hoc saliency (R4.1)</h2>
+
+<p>MATLAB's Deep Learning Toolbox provides exactly three image-explanation functions: <code>gradCAM</code>, <code>occlusionSensitivity</code> and <code>imageLIME</code>. <span class="tag v">Verified</span> Anything beyond these must be implemented manually with <code>dlfeval</code> and <code>dlgradient</code>.</p>
+
+<table>
+<thead><tr><th style="width:22%">Function</th><th style="width:14%">Cost</th><th>Use in this project</th></tr></thead>
+<tbody>
+<tr><td><code>gradCAM</code></td><td>One backward pass</td><td>Primary, mandated by R4.1. Fast enough for the live UI.</td></tr>
+<tr><td><code>occlusionSensitivity</code></td><td>Many forward passes</td><td>Secondary. With a small mask size it gives finer localisation than Grad-CAM but is far slower. Use for offline analysis and the comparison study, not the live path. Supports non-classification tasks from R2024a. <span class="tag v">Verified</span></td></tr>
+<tr><td><code>imageLIME</code></td><td>Many forward passes</td><td>Secondary. Superpixel-based; produces segment-level importance. Included in the method comparison.</td></tr>
+</tbody>
+</table>
+
+<h2>8.3 The Grad-CAM resolution limitation &mdash; know this number</h2>
+
+<div class="box warn">
+<p>Grad-CAM computes its map at the spatial resolution of the chosen convolutional layer, then upsamples. For ResNet-50, the final convolutional block has a stride of 32 relative to the input. <strong>At 448&times;448 input, the Grad-CAM map is 14&times;14.</strong> Each cell of that map therefore covers roughly a 32&times;32-pixel region of the resized input.</p>
+<p style="margin-bottom:0">A microaneurysm at that scale occupies a fraction of one cell. <strong>Grad-CAM at the final layer physically cannot localise a microaneurysm.</strong> This is not a tuning problem; it is arithmetic.</p>
+</div>
+
+<p><strong>What we do about it, and what we say about it:</strong></p>
+<ol>
+<li><strong>Compute Grad-CAM at multiple depths.</strong> Earlier layers give finer maps (lower stride) but weaker class specificity. Present the trade-off explicitly rather than silently picking one. Selecting the layer is a <code>gradCAM</code> argument, so this is inexpensive.</li>
+<li><strong>Do not oversell it.</strong> Grad-CAM answers "which region drove this decision," and for large lesions such as exudates and haemorrhages it does that well. Report it as regional attention, not lesion localisation.</li>
+<li><strong>Supply channel 2 for the fine detail.</strong> This is precisely why the PS asks for lesion-level evidence in the same breath.</li>
+<li><strong>Measure the gap rather than asserting it</strong> (§11.7).</li>
+</ol>
+
+<p>Being able to state this limitation crisply is worth more in front of a MathWorks judge than any accuracy figure in the deck. It demonstrates that you understand the tool rather than having invoked it.</p>
+
+<h2>8.4 Channel 2 &mdash; lesion-level evidence (R4.2)</h2>
+
+<p>From §6, we have per-lesion detections. Convert them into clinical evidence:</p>
+<ul>
+<li>Divide the retina into the four <strong>quadrants</strong> defined relative to the optic disc&ndash;fovea axis (superior-temporal, inferior-temporal, superior-nasal, inferior-nasal). This is the spatial partition the ICDR criteria are written against, so it is not an arbitrary choice.</li>
+<li>Count detections per lesion class per quadrant.</li>
+<li>Record the distance of each hard exudate from the fovea, since exudates near the macula carry different clinical significance.</li>
+<li>Render as coloured overlays with a legend and a counts table.</li>
+</ul>
+
+<h2>8.5 Channel 3 &mdash; the ICDR rule trace</h2>
+
+<p>Apply the §3.3 criteria to the counts from §8.4 and emit the reasoning as text. This is the "correlated with clinical criteria" half of R4.2, made literal.</p>
+
+<pre><code>LESION EVIDENCE
+  Microaneurysms      17   (ST 6 · IT 5 · SN 3 · IN 3)
+  Haemorrhages         4   (ST 2 · IT 2 · SN 0 · IN 0)
+  Hard exudates        2   (nearest to fovea: 1.4 disc diameters)
+  Soft exudates        0
+  Venous beading       not detected
+  Neovascularisation   not assessed - see limitations
+
+ICDR RULE TRACE
+  Level 1 requires microaneurysms only .................. exceeded
+  Level 3 (4-2-1) requires >20 haemorrhages in 4 quadrants
+          / beading in 2+ quadrants / IRMA ............... not met
+  => More than MA only, less than severe NPDR
+  => LEVEL 2 - MODERATE NPDR  ->  REFERABLE
+
+CNN GRADE      Level 2   (calibrated confidence 0.88)
+AGREEMENT      Rule path and CNN agree
+</code></pre>
+
+<div class="box ok">
+<h4>Why this beats a heatmap in front of a clinician</h4>
+<p style="margin-bottom:0">A heatmap says "the model looked here." This says "there are 17 microaneurysms and 4 haemorrhages distributed thus, which under the published ICDR criterion is Moderate NPDR, which is referable." The second is checkable. An ophthalmologist can look at the image and verify the counts. That is what makes validation in under 30 seconds (R4.5) realistic, and it is what we measure in §12.</p>
+</div>
+
+<h2>8.6 The agreement check and the unexplained-prediction flag</h2>
+
+<p>With three channels we can cross-examine the system's own output. Four states:</p>
+
+<table>
+<thead><tr><th style="width:16%">State</th><th style="width:30%">Condition</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><strong>Concordant</strong></td><td>CNN grade and rule-path grade agree; Grad-CAM peaks coincide with detected lesions</td><td>Proceed with the automated decision. Report high explanation confidence.</td></tr>
+<tr><td><strong>Under-detected</strong></td><td>CNN says referable; lesion detector finds little or nothing</td><td><strong>Escalate.</strong> Either the detector missed findings or the classifier is keying on something that is not disease.</td></tr>
+<tr><td><strong>Over-detected</strong></td><td>Lesion detector finds substantial pathology; CNN says not referable</td><td><strong>Escalate.</strong> Favours safety, since the lesion path is the clinically grounded one.</td></tr>
+<tr><td><strong>Spatially inconsistent</strong></td><td>Grades agree, but Grad-CAM attention falls outside all detected lesions</td><td>Flag in the report as reduced explanation confidence. Consider escalation.</td></tr>
+</tbody>
+</table>
+
+<p>The under-detected state is the important one. Retinal classifiers are known to be able to exploit non-pathological image properties, and a model that has learned a camera artefact will still produce a confident prediction and a plausible-looking heatmap. Standard post-hoc XAI presents that heatmap as a justification, which is worse than offering no explanation at all. Our pipeline detects the condition and declines to decide.</p>
+
+<h2>8.7 Automated annotated report (R4.4)</h2>
+
+<p>One page, generated per patient, designed to be read by a health worker and checked by a remote grader.</p>
+
+<table>
+<thead><tr><th style="width:24%">Element</th><th>Content</th></tr></thead>
+<tbody>
+<tr><td>Header</td><td>Patient ID, date, eye (L/R), camera, PHC identifier</td></tr>
+<tr><td>Quality verdict</td><td>Tier, and whether enhancement was applied</td></tr>
+<tr><td>Images</td><td>Original; enhanced; lesion overlay; Grad-CAM overlay &mdash; four panels</td></tr>
+<tr><td>Evidence block</td><td>The lesion counts table and ICDR rule trace from §8.5</td></tr>
+<tr><td>Decision</td><td>Auto-clear / Refer / Escalate, with calibrated confidence</td></tr>
+<tr><td>Agreement status</td><td>Concordant, or the specific disagreement detected</td></tr>
+<tr><td>Footer</td><td><strong>"Screening aid. Not a diagnosis. Requires clinician confirmation."</strong> &mdash; non-negotiable, see §17.4</td></tr>
+</tbody>
+</table>
+
+<p><strong>Implementation.</strong> MATLAB Report Generator is a separate product and is <em>not</em> among the six the PS names, so do not build a dependency on it. Compose the report as a figure or tiled layout and write it out with <code>exportgraphics</code> to PDF, appending pages as needed. This keeps the deliverable inside the declared toolbox set.</p>
+
+<h1>9. Component 5 &mdash; SimEvents District Capacity Model</h1>
+
+<p class="lead">Discharges R5.1, R5.2. No GPU, no dataset, no machine learning. Buildable in parallel with everything else, from day one. This is the highest return-per-hour component in the entire problem statement.</p>
+
+<h2>9.1 Why this matters more than its size suggests</h2>
+
+<p>Requirement 5 is a fifth of the problem statement. It is also the part that most teams will skip, reduce to a static bar chart, or discover on the morning of the presentation. It is the MathWorks-specific portion of a MathWorks problem statement, and it is the part a MathWorks judge is personally best placed to evaluate.</p>
+
+<p>It also closes a loop that nothing else in the pipeline closes. Everywhere else, the classifier's operating point is a number we choose to satisfy a target. Here it becomes an <em>input to a capacity model</em> with real consequences: raising sensitivity produces more false positives, which consume more grader hours, which lengthen turnaround for everyone. That trade-off is quantifiable, and quantifying it is precisely the "optimise resource allocation" that R5.2 asks for.</p>
+
+<h2>9.2 Tooling</h2>
+
+<p>SimEvents supplies the required block types directly: Entity Generator, Queue, Server, Entity Input/Output Switch for routing, and Resource Pool / Resource Acquirer / Resource Releaser for modelling a limited pool of human graders, together with statistics collection on throughput, latency and utilisation. <span class="tag v">Verified</span></p>
+
+<h2>9.3 Model structure (R5.1)</h2>
+
+<div class="ascii">
+ ┌─────────────┐   ┌──────────┐   ┌───────────────┐   ┌──────────────┐
+ │   Entity    │──►│  PHC     │──►│ Capture +     │──►│ Quality gate │
+ │  Generator  │   │  queue   │   │ quality check │   │   decision   │
+ │ (patients)  │   └──────────┘   │  (server)     │   └──┬────────┬──┘
+ └─────────────┘                  └───────────────┘  reject      pass
+   arrivals: Poisson base rate                          │         │
+   + camp-day bursts                          ┌─────────▼──┐      │
+                                              │ recapture  │      │
+                                              │ loop (≤2)  │──────┤
+                                              └────────────┘      │
+                                                                  ▼
+                                              ┌──────────────────────────┐
+                                              │ Local AI inference       │
+                                              │ (server, ~t_infer)       │
+                                              └───────────┬──────────────┘
+                                                          │
+                       ┌──────────────────┬───────────────┴──────┐
+                  auto-clear            refer                escalate
+                       │                  │                      │
+                       ▼                  ▼                      ▼
+                  ┌────────┐      ┌──────────────┐      ┌──────────────┐
+                  │  exit  │      │ upload queue │      │ upload queue │
+                  └────────┘      │ (bandwidth-  │      │              │
+                                  │  limited)    │      │              │
+                                  └──────┬───────┘      └──────┬───────┘
+                                         └──────────┬──────────┘
+                                                    ▼
+                                        ┌───────────────────────┐
+                                        │  Grader review queue  │
+                                        │  Resource Pool: N     │
+                                        │  graders, service     │
+                                        │  time from §12        │
+                                        └───────────┬───────────┘
+                                                    ▼
+                                            ┌───────────────┐
+                                            │ report issued │
+                                            └───────────────┘
+</div>
+
+<h2>9.4 Parameters</h2>
+
+<p>Every parameter is a named variable in a configuration file, never a number typed into a block dialog. This is what makes §9.5 possible.</p>
+
+<table class="tight">
+<thead><tr><th style="width:22%">Parameter</th><th style="width:20%">Indicative value</th><th>Source / note</th></tr></thead>
+<tbody>
+<tr><td>Annual screening volume</td><td>100,000+</td><td>Set by R5.2</td></tr>
+<tr><td>Arrival process</td><td>Poisson base + camp-day bursts</td><td>NCD screening camps produce highly bursty arrivals; a flat rate would understate peak queueing badly</td></tr>
+<tr><td>Number of PHCs</td><td>Sweep parameter</td><td>Determines parallelism at the capture stage</td></tr>
+<tr><td>Capture time per patient</td><td>Sweep, order of minutes</td><td>Includes both eyes and patient handling</td></tr>
+<tr><td>Quality rejection rate</td><td>Sweep; measured from §5 on real data</td><td><strong>Links C1 to C5.</strong> Our own measured rejection rate becomes this model's input.</td></tr>
+<tr><td>Recapture attempts allowed</td><td>2</td><td>After which the patient is referred for manual examination</td></tr>
+<tr><td>AI inference time</td><td>Measured on target hardware</td><td>Measure it; do not assume it</td></tr>
+<tr><td>Upload bandwidth</td><td>Sweep</td><td>Service time modelled as file size / available bandwidth. Rural connectivity is the binding constraint here.</td></tr>
+<tr><td>Connectivity availability</td><td>Sweep (e.g. duty cycle)</td><td>Drives the store-and-forward queue depth</td></tr>
+<tr><td>Number of graders</td><td><strong>Primary sweep variable</strong></td><td>The scarce resource. The PS states ~1 ophthalmologist per 100,000 rural population.</td></tr>
+<tr><td>Grader service time</td><td><strong>From the reader study, §12</strong></td><td><strong>Links C4 to C5.</strong> The measured ~30 s target from R4.5 is this model's service-time distribution.</td></tr>
+<tr><td>AI sensitivity / specificity</td><td><strong>From §11.2</strong></td><td><strong>Links C3 to C5.</strong> Determines referral and false-positive volume.</td></tr>
+<tr><td>Deferral threshold</td><td><strong>From §7.5</strong></td><td>Determines escalation volume</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>Note the four arrows back into the rest of the project</h4>
+<p style="margin-bottom:0">Quality rejection rate, grader service time, model sensitivity/specificity, and deferral threshold are all <em>measured outputs of components 1, 3 and 4</em> feeding into component 5 as inputs. This is what makes the Simulink model an integrated part of the system rather than a decorative side-exhibit, and it is a strong thing to be able to point at during judging.</p>
+</div>
+
+<h2>9.5 Optimisation experiments (R5.2)</h2>
+
+<p>Outputs collected: end-to-end turnaround distribution, grader utilisation, queue lengths over time, throughput, and the fraction of patients whose result is issued within the target window.</p>
+
+<table>
+<thead><tr><th style="width:6%">#</th><th style="width:28%">Experiment</th><th>Question answered</th></tr></thead>
+<tbody>
+<tr><td>E1</td><td>Sweep grader count at fixed volume</td><td>What is the minimum number of graders needed to keep turnaround within target for 100,000 patients per year? The headline resource-allocation answer.</td></tr>
+<tr><td>E2</td><td>Sweep AI operating point</td><td><strong>The interesting one.</strong> Raising sensitivity from 90% to 95% increases false positives, which increases grader load. Plot grader-hours per year against sensitivity to expose the trade-off.</td></tr>
+<tr><td>E3</td><td>Sweep deferral threshold</td><td>How much human capacity does the escalation path consume, and what accuracy does it buy? Directly quantifies the cost of the safety mechanism in §8.6.</td></tr>
+<tr><td>E4</td><td>Sweep bandwidth and connectivity duty cycle</td><td>At what connectivity does upload, rather than grader capacity, become the bottleneck? Determines whether local inference is necessary or merely convenient.</td></tr>
+<tr><td>E5</td><td>Toggle the quality gate</td><td>What happens to grader load if ungradable images are forwarded instead of rejected? <strong>Feeds R6.2 directly:</strong> demonstrates the quality gate's system-level value in grader-hours, not just in accuracy.</td></tr>
+<tr><td>E6</td><td>Bursty vs smooth arrivals</td><td>How much does camp-day bunching degrade turnaround, and does buffering fix it?</td></tr>
+</tbody>
+</table>
+
+<p><strong>Headline deliverable from this component:</strong> a Pareto curve of screening sensitivity against annual grader-hours, with the PS's &gt;90% sensitivity target marked on it, and a stated minimum viable grader count for a district of 100,000 screenings per year. That is a genuine operations-research result derived from your own measured model parameters, and no other team will have one.</p>
+
+<h1>10. Data Strategy and Validation Protocol</h1>
+
+<p class="lead">This section is the project's answer to the PS's charge that existing solutions "lack clinical validation rigor." It is also the section most likely to be undermined by an innocent shortcut, so it is written as rules rather than suggestions.</p>
+
+<h2>10.1 Datasets</h2>
+
+<table class="tight">
+<thead><tr><th style="width:14%">Dataset</th><th style="width:10%">Size</th><th style="width:20%">Labels</th><th style="width:14%">Origin</th><th>Role here</th></tr></thead>
+<tbody>
+<tr><td><strong>APTOS 2019</strong></td><td>~3,662 train</td><td>ICDR 0&ndash;4, image level</td><td>Aravind Eye Hospital, India</td><td><strong>Primary training set.</strong> Indian population and Indian cameras &mdash; the closest available proxy for the deployment setting.</td></tr>
+<tr><td><strong>IDRiD</strong></td><td>~516 graded; smaller subset with masks</td><td>ICDR grades; <strong>pixel masks for MA, HE, EX, SE</strong>; optic disc masks; fovea coordinates</td><td>Nanded, India</td><td><strong>Lesion supervision and XAI ground truth.</strong> The only named dataset with pixel-level lesion masks, which makes it the basis for §11.7.</td></tr>
+<tr><td><strong>DRIVE</strong></td><td>40</td><td>Vessel masks</td><td>Netherlands</td><td>Vessel segmentation training and benchmarking</td></tr>
+<tr><td><strong>Messidor-2</strong></td><td>~1,748 images</td><td>DR grades</td><td>France</td><td><strong>SEALED EXTERNAL TEST SET.</strong> Different country, population and cameras. See §10.4.</td></tr>
+</tbody>
+</table>
+
+<p class="small"><span class="tag u">Unverified</span> &mdash; all counts above are believed correct but must be confirmed against the actual downloads and recorded here by the data owner. Do not quote them in the submission until checked.</p>
+
+<div class="box warn">
+<h4>Access lead times &mdash; start today</h4>
+<p style="margin-bottom:0">Messidor-2 is distributed under a licence agreement rather than by direct download, and IDRiD is hosted on IEEE DataPort. Both can take days to clear. <strong>Request access on day one.</strong> A sealed external test set you cannot obtain until December is not a validation strategy. If Messidor-2 access does not arrive in time, the fallback is a held-out, patient-disjoint IDRiD split as the external set, clearly labelled as a weaker substitute because it shares an Indian origin with the training data.</p>
+</div>
+
+<h2>10.2 Split discipline</h2>
+
+<table>
+<thead><tr><th style="width:22%">Rule</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td><strong>Patient-level splits, never image-level</strong></td><td>Left and right eyes of one patient are correlated. If one eye is in training and the other in test, the test score is inflated and the inflation is invisible. This is the single most common silent leak in retinal ML.</td></tr>
+<tr><td><strong>Four splits, not three</strong></td><td>Train / validation / <strong>calibration</strong> / test. Temperature scaling (§7.6) must be fitted on data used for nothing else, or the reported calibration is optimistic.</td></tr>
+<tr><td><strong>Fixed seed, split file committed</strong></td><td>The split is generated once, written to a CSV, and that CSV is committed. Never regenerate the split at run time.</td></tr>
+<tr><td><strong>Stratified by grade</strong></td><td>Levels 3 and 4 are sparse; unstratified random splitting can leave a validation fold with almost none.</td></tr>
+</tbody>
+</table>
+
+<h2>10.3 Data provenance log</h2>
+
+<p>Maintain <code>data/PROVENANCE.md</code> recording, for each dataset: source URL, download date, licence terms, file count and total size, SHA-256 of the archive, and any preprocessing applied before use. This takes fifteen minutes and answers, instantly and credibly, any judge question about where the data came from and whether you were entitled to use it.</p>
+
+<h2>10.4 The sealed test set &mdash; the core rigour mechanism</h2>
+
+<div class="box">
+<h4>Protocol</h4>
+<ol>
+<li>On download, Messidor-2 is placed in an archive that is <strong>encrypted or otherwise access-controlled</strong>, and one named team member holds the key. It is not extracted into the working tree.</li>
+<li>All development &mdash; architecture selection, hyperparameter tuning, threshold selection, calibration &mdash; happens using train / validation / calibration splits only.</li>
+<li>When the team judges the system complete, the operating point is <strong>frozen and recorded in this document</strong> with a date, along with the validation-set metrics that justified it.</li>
+<li>Only then is the sealed set opened, and the frozen pipeline run over it <strong>exactly once</strong>.</li>
+<li>Whatever comes out is reported. <strong>If external performance falls below the PS targets, that result is reported and analysed, not tuned away.</strong></li>
+<li>If any change is made to the pipeline after opening the seal, the resulting number ceases to be an external validation result and must be reported as such.</li>
+</ol>
+</div>
+
+<p>Two reasons this is worth the discipline. The scientific one: any threshold chosen with knowledge of the test set makes the reported figure an optimistic estimate of deployed performance, and screening decisions affect eyesight. The competitive one: the PS explicitly criticises existing solutions for lacking validation rigour. A team that can describe this protocol, and show the frozen operating point with a date preceding the test run, has answered the problem statement's central complaint with a procedure rather than a claim.</p>
+
+<h2>10.5 Expected domain shift, stated in advance</h2>
+
+<p>We predict, before running the experiment, that performance on Messidor-2 will be <strong>lower</strong> than on the internal APTOS test split. Recording the prediction here, in advance, is part of the protocol.</p>
+
+<table>
+<thead><tr><th style="width:26%">Shift factor</th><th>Nature</th></tr></thead>
+<tbody>
+<tr><td>Population</td><td>Indian (APTOS) vs French (Messidor-2) &mdash; different fundus pigmentation distributions</td></tr>
+<tr><td>Camera and optics</td><td>Different manufacturers, fields of view, resolutions and colour rendering</td></tr>
+<tr><td>Acquisition protocol</td><td>Different dilation practice, field definition and operator training</td></tr>
+<tr><td>Label process</td><td>Different grading protocols and grader pools; APTOS grades are single-grader, so label noise is present in training</td></tr>
+</tbody>
+</table>
+
+<p>A drop is the expected, honest outcome and is well documented across the medical imaging literature. Reporting it, decomposing it, and proposing mitigation (colour and illumination normalisation, quality-tier stratification, and camera-specific recalibration on a small local sample) is a stronger result than an implausibly flat external number.</p>
+
+<h1>11. Evaluation Framework</h1>
+
+<p class="lead">Discharges R3.2, R3.3, R6.1, R6.2. Build this before you build the models. An evaluation harness written after the fact gets written to flatter whatever the model already does.</p>
+
+<h2>11.1 Reporting policy</h2>
+
+<table>
+<thead><tr><th style="width:44%">Never report</th><th>Always report instead</th></tr></thead>
+<tbody>
+<tr><td>Bare accuracy</td><td>Sensitivity and specificity at the frozen operating point, with 95% confidence intervals</td></tr>
+<tr><td>A single number with no interval</td><td>Point estimate with a Wilson score interval; state <em>n</em></td></tr>
+<tr><td>Best epoch selected on the test set</td><td>Epoch selected on validation; test touched once</td></tr>
+<tr><td>Metrics on a filtered "clean" subset only</td><td>Metrics on the full set, plus a stratified breakdown by quality tier</td></tr>
+<tr><td>Softmax output described as "confidence"</td><td>Temperature-scaled probability, with ECE and a reliability diagram</td></tr>
+</tbody>
+</table>
+
+<h2>11.2 Primary endpoint (R3.2, R3.3)</h2>
+
+<p><strong>Referable DR</strong> = predicted ICDR Level ≥ 2. With the ordinal head of §7.3, this is the direct output P(grade &gt; 1).</p>
+
+<h4>Threshold selection protocol</h4>
+<ol>
+<li>On the <strong>validation</strong> split, sweep the decision threshold across its range.</li>
+<li>Select the threshold that achieves sensitivity ≥ 0.90, and among those, maximises specificity.</li>
+<li><strong>Freeze it. Record the value and the date in the table below.</strong></li>
+<li>Apply the frozen threshold unchanged to the internal test split and to the sealed external set.</li>
+</ol>
+
+<table class="kv">
+<tbody>
+<tr><td>Frozen threshold value</td><td><em>to be recorded on freeze</em></td></tr>
+<tr><td>Freeze date</td><td><em>to be recorded on freeze</em></td></tr>
+<tr><td>Validation sensitivity / specificity at freeze</td><td><em>to be recorded on freeze</em></td></tr>
+<tr><td>Frozen by</td><td><em>name</em></td></tr>
+</tbody>
+</table>
+
+<h2>11.3 Full metric set</h2>
+
+<table class="tight">
+<thead><tr><th style="width:26%">Metric</th><th style="width:14%">Applies to</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>Sensitivity, specificity</strong> at frozen threshold, with 95% CI</td><td>Referable DR</td><td>Primary endpoint. Directly tests R3.2 and R3.3.</td></tr>
+<tr><td>PPV and NPV at screening prevalence</td><td>Referable DR</td><td>What the number actually means to a patient. Prevalence-dependent, so state the prevalence assumed.</td></tr>
+<tr><td>ROC curve and AUC</td><td>Referable DR</td><td>Threshold-independent summary; comparable to published benchmarks (R6.1)</td></tr>
+<tr><td>Precision&ndash;recall curve and AUPR</td><td>Referable DR; all lesion segmentation</td><td>More informative than ROC under class imbalance</td></tr>
+<tr><td><strong>Quadratic weighted kappa</strong></td><td>5-class grade</td><td>The standard ordinal agreement metric for DR grading and the APTOS competition metric. Penalises distant confusions more than adjacent ones. <span class="tag u">Unverified &mdash; confirm as the APTOS metric</span></td></tr>
+<tr><td><strong>Full confusion matrix and per-class recall</strong></td><td>5-class grade</td><td>Exposes majority-class collapse. Mandatory in every run.</td></tr>
+<tr><td>Expected Calibration Error; reliability diagram; Brier score</td><td>Probabilities</td><td>Discharges R4.3</td></tr>
+<tr><td><strong>Risk&ndash;coverage curve</strong></td><td>Deferral policy</td><td>Accuracy as a function of the fraction of cases the system handles autonomously. Sets the deferral threshold and feeds §9.5 E3.</td></tr>
+<tr><td>Stratification by quality tier</td><td>All of the above</td><td>Directly addresses the PS's "fail with variable image quality" charge</td></tr>
+<tr><td>Stratification by dataset / camera</td><td>All of the above</td><td>Exposes domain shift (§10.5)</td></tr>
+<tr><td>Inference latency and model size</td><td>Deployment</td><td>Feeds §9.4; determines offline feasibility</td></tr>
+</tbody>
+</table>
+
+<h2>11.4 Reporting internal versus external</h2>
+
+<p>Every headline result appears twice, side by side, in this shape:</p>
+
+<table>
+<thead><tr><th style="width:34%">Metric (referable DR)</th><th style="width:22%">Internal test<br><span class="small">APTOS held-out</span></th><th style="width:22%">External test<br><span class="small">Messidor-2, sealed</span></th><th>PS target</th></tr></thead>
+<tbody>
+<tr><td>Sensitivity (95% CI)</td><td><em>result</em></td><td><em>result</em></td><td>&gt; 90%</td></tr>
+<tr><td>Specificity (95% CI)</td><td><em>result</em></td><td><em>result</em></td><td>&gt; 85%</td></tr>
+<tr><td>AUC</td><td><em>result</em></td><td><em>result</em></td><td>&mdash;</td></tr>
+<tr><td>Quadratic weighted kappa</td><td><em>result</em></td><td><em>result</em></td><td>&mdash;</td></tr>
+<tr><td>ECE</td><td><em>result</em></td><td><em>result</em></td><td>&mdash;</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>If the external number misses the PS target</h4>
+<p style="margin-bottom:0">Report it, then explain it using §10.5, then state what would close the gap: local recalibration on a modest sample of images from the deployment camera, quality-tier-specific thresholds, and additional training data from the target population. <strong>This is a stronger submission than an unexplained near-perfect number</strong>, because it is the only version a judge can actually believe, and because the PS asked for validation rigour rather than for a high score.</p>
+</div>
+
+<h2>11.5 Comparison to published benchmarks (R6.1)</h2>
+
+<p>Compare against published results on the same datasets, being scrupulous about comparability. Note explicitly where a comparison is not like-for-like &mdash; different splits, different label sets, different endpoints. A carefully qualified comparison is credible; an unqualified leaderboard-style table is not.</p>
+
+<table>
+<thead><tr><th style="width:22%">Comparison</th><th style="width:26%">Against</th><th>Caveat to state</th></tr></thead>
+<tbody>
+<tr><td>Referable DR sens/spec</td><td>Regulator-cleared systems (§3.5)</td><td>Different test populations and reference standards. Indicative context only, not a head-to-head.</td></tr>
+<tr><td>5-class kappa</td><td>Published APTOS results</td><td>Public leaderboard splits differ from ours; ours is patient-level and stratified.</td></tr>
+<tr><td>Lesion segmentation AUPR</td><td>Published IDRiD segmentation results</td><td>Confirm whether the published split matches ours.</td></tr>
+<tr><td>Vessel segmentation</td><td>Published DRIVE results</td><td>Standard 20/20 split, so this one is closest to like-for-like.</td></tr>
+<tr><td>XAI localisation precision</td><td>Sparse BagNet 0.960 vs Guided Backprop 0.656 <span class="tag v">Verified</span></td><td>Different dataset and lesion-matching definition. Reproduce the <em>comparison structure</em> on our data rather than claiming their numbers.</td></tr>
+</tbody>
+</table>
+
+<h2>11.6 Ablation study (R6.2) &mdash; the requirement teams miss</h2>
+
+<p>R6.2 asks you to show the integrated pipeline beats any single-technique approach. That is an instruction to ablate. Run all configurations on the same held-out data with the same frozen threshold:</p>
+
+<table>
+<thead><tr><th style="width:8%">Cfg</th><th style="width:32%">Configuration</th><th>What its result establishes</th></tr></thead>
+<tbody>
+<tr><td>A1</td><td>CNN only, no quality gate, no lesion evidence, no deferral</td><td>The single-technique baseline. This is what a typical competing solution is.</td></tr>
+<tr><td>A2</td><td>CNN + quality gate</td><td>Isolates the contribution of C1</td></tr>
+<tr><td>A3</td><td>Lesion detection + ICDR rules only, no CNN</td><td>The fully interpretable baseline. Expected to be weakest on raw accuracy &mdash; its value is as the interpretable reference and as the source of the agreement check.</td></tr>
+<tr><td>A4</td><td>CNN + quality gate + deferral</td><td>Isolates the contribution of uncertainty-based escalation</td></tr>
+<tr><td><strong>A5</strong></td><td><strong>Full pipeline</strong>: quality gate + CNN + lesion evidence + agreement check + deferral</td><td>The integrated system. Should dominate on the safety-relevant metrics.</td></tr>
+</tbody>
+</table>
+
+<p>Report all five in one table. Note that A5's advantage will show most clearly not in raw accuracy but in <strong>accuracy on the autonomously-handled subset</strong> &mdash; that is the whole point of deferral, and it should be stated that way rather than apologised for. Comparing A5 against A1 at equal coverage is the fair comparison, and the risk&ndash;coverage curve is how you present it.</p>
+
+<div class="box warn">
+<h4>Architectural consequence</h4>
+<p style="margin-bottom:0">Configurations A1&ndash;A5 must be selectable from a config file, not by editing code. If ablation requires commenting out lines, it will be done once, badly, the night before. Build the pipeline with each stage independently switchable from day one (§13.3).</p>
+</div>
+
+<h2>11.7 Explanation quality metrics &mdash; the differentiator</h2>
+
+<p>Almost every team will show heatmaps. Very few will <strong>measure</strong> them. IDRiD's pixel-level lesion masks make quantitative evaluation possible, and this is the main reason IDRiD is in our pipeline at all.</p>
+
+<table>
+<thead><tr><th style="width:26%">Metric</th><th>Definition and purpose</th></tr></thead>
+<tbody>
+<tr><td><strong>Lesion hit rate</strong> (pointing game)</td><td>Take the top-<em>k</em>% most salient pixels of the explanation map. What fraction falls inside a ground-truth lesion mask? Computed identically for Grad-CAM, occlusion sensitivity, LIME and the lesion-evidence channel. <strong>This is the head-to-head comparison the PS's R6.2 asks for, made numeric.</strong></td></tr>
+<tr><td><strong>Deletion / insertion AUC</strong></td><td>Progressively remove the pixels the explanation says matter most and track the predicted probability. A faithful explanation causes a fast drop (deletion) and a fast rise (insertion). Measures faithfulness to the model, which is distinct from agreement with clinical ground truth &mdash; report both, because an explanation can be faithful to a model that is wrong.</td></tr>
+<tr><td><strong>Sanity checks</strong> (parameter randomisation)</td><td>Progressively randomise the trained model's weights from the top layer down and recompute the explanation. If the map barely changes, the method is not explaining <em>this model</em> &mdash; it is largely an edge detector. A number of widely used saliency methods fail this test in the published literature. <span class="tag u">Unverified &mdash; confirm the reference before citing which methods fail</span> <strong>Running this on your own maps is a strong rigour signal and costs one afternoon.</strong></td></tr>
+<tr><td><strong>Channel disagreement rate</strong></td><td>Fraction of cases in each of the four states of §8.6. Quantifies how often the unexplained-prediction flag fires, which is both a safety statistic and a direct input to §9.5 E3.</td></tr>
+<tr><td><strong>Clinician usefulness rating</strong></td><td>From §12. Discharges R6.3 &mdash; "Grad-CAM outputs rated as clinically useful" &mdash; which cannot be discharged by any automated metric.</td></tr>
+</tbody>
+</table>
+
+<h1>12. Clinical Reader Study Protocol</h1>
+
+<p class="lead">Discharges R4.5 and R6.3, and supplies the grader service-time distribution to §9.4. This is the highest-value-per-hour activity in the project and it requires one email.</p>
+
+<h2>12.1 Why it is worth the effort</h2>
+
+<p>R6.3 requires Grad-CAM outputs "rated as clinically useful," and R4.5 requires "ophthalmologist validation in under 30 seconds." <strong>Neither can be discharged by an automated metric.</strong> Both require a clinician looking at your outputs and a stopwatch.</p>
+
+<p>The PLOS Digital Health study cited in §1.3 is essentially this experiment at scale, with six ophthalmologists. A twenty-case pilot with one ophthalmologist is entirely achievable by two students in an afternoon, and it converts two requirements from assertions into measurements.</p>
+
+<h2>12.2 Recruitment</h2>
+
+<p>You need one ophthalmologist for approximately two hours. A postgraduate resident in ophthalmology at any government medical college is an appropriate and reachable participant. Approach the department by email, state that this is a student project for a national hackathon, that no patient data is involved (all images are from public research datasets), and that you need two hours. Offer acknowledgement in the submission.</p>
+
+<h2>12.3 Design</h2>
+
+<table class="kv">
+<tbody>
+<tr><td>Cases</td><td>20&ndash;30, stratified across ICDR levels, and deliberately including cases where the channels of §8.6 disagree</td></tr>
+<tr><td>Reference standard</td><td>Dataset ground-truth grades</td></tr>
+<tr><td>Arms</td><td>(1) image only; (2) image + AI grade; (3) image + AI grade + full explanation</td></tr>
+<tr><td>Ordering</td><td>Counterbalanced across cases so that arm order cannot explain any effect; the same case is not seen twice in the same session</td></tr>
+<tr><td>Primary measures</td><td><strong>Time to decision</strong> (target: under 30 s, per R4.5); agreement with reference standard</td></tr>
+<tr><td>Secondary measures</td><td>Explanation usefulness on a Likert scale; free-text comment on each; explicit flag for any explanation judged <strong>misleading</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box">
+<h4>Record the misleading cases especially carefully</h4>
+<p style="margin-bottom:0">An explanation rated <em>misleading</em> is a more valuable finding than one rated useful, and it is exactly the failure mode the unexplained-prediction flag (§8.6) exists to catch. If the clinician flags a case as misleading, check whether your agreement check had already flagged it. If it had, that is a validated safety mechanism and it belongs in the presentation. If it had not, that is a real finding about your system's limits, and reporting it is what rigour looks like.</p>
+</div>
+
+<h2>12.4 Honest reporting</h2>
+
+<p>With a single reader and twenty cases this is a <strong>pilot</strong>, not a clinical validation study. Report it as a pilot: state <em>n</em>, state that it is one reader, give confidence intervals, and do not generalise. A correctly-labelled pilot is credible and impressive for a student team. A twenty-case study described as "clinical validation" invites a judge to dismantle it.</p>
+
+<h2>12.5 Fallback if no clinician is available</h2>
+
+<p>If nobody responds before the finale, do <strong>not</strong> fabricate ratings. Instead: present the protocol above as a designed, ready-to-run study; report the automated proxies from §11.7 in its place; and state plainly that clinical rating is pending. A well-specified unexecuted protocol is a legitimate deliverable. Invented clinician ratings are misconduct, and they are also easy to catch, because a judge will ask which hospital and which clinician.</p>
+
+<h1>13. Software Engineering</h1>
+
+<h2>13.1 Repository layout</h2>
+
+<pre><code>sih26038/
+  config/
+    default.json          % every hyperparameter and pipeline switch
+    ablation_A1..A5.json  % §11.6 configurations
+  data/
+    PROVENANCE.md         % §10.3
+    splits/               % committed CSV split files - never regenerated
+    sealed/               % Messidor-2, access-controlled, §10.4
+  src/
+    +quality/             % C1
+    +segment/             % C2
+    +grade/               % C3
+    +explain/             % C4
+    +report/              % report generation
+    +common/              % preprocessing shared by train and inference
+  simulink/
+    district_model.slx    % C5
+    sweep_experiments.m   % §9.5 E1-E6
+  eval/
+    harness.m             % BUILD THIS FIRST
+    metrics/
+  app/
+    ScreeningApp.mlapp    % App Designer UI
+  tests/                  % matlab.unittest
+  results/                % dated, never overwritten
+  docs/</code></pre>
+
+<h2>13.2 Conventions</h2>
+
+<table>
+<thead><tr><th style="width:26%">Convention</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>MATLAB packages (<code>+folder</code>) for namespacing</td><td>Avoids function-name collisions as the codebase grows</td></tr>
+<tr><td><code>rng(seed)</code> at the top of every entry point</td><td>Reproducibility. A result you cannot reproduce is not a result.</td></tr>
+<tr><td>Results written to a <strong>dated</strong> directory, never overwritten</td><td>Lets you compare runs and recover from a regression</td></tr>
+<tr><td>Every run writes its full config alongside its results</td><td>Answers "what produced this number?" months later</td></tr>
+<tr><td>Experiment Manager for hyperparameter sweeps</td><td>Reproducible, auditable, and a visible use of the MathWorks toolchain</td></tr>
+<tr><td><code>matlab.unittest</code> for the preprocessing and metric functions</td><td>Metric bugs silently invalidate every result downstream of them</td></tr>
+</tbody>
+</table>
+
+<h2>13.3 Configuration-driven pipeline</h2>
+
+<p>Every stage must be switchable from configuration, because §11.6 requires running five pipeline variants and §9.5 requires sweeping parameters that originate in those stages.</p>
+
+<pre><code>{
+  "pipeline": {
+    "quality_gate":     true,
+    "enhancement":      true,
+    "lesion_evidence":  true,
+    "agreement_check":  true,
+    "deferral":         true
+  },
+  "grading": {
+    "backbone":     "resnet50",
+    "input_size":   448,
+    "head":         "ordinal",
+    "batch_size":   12,
+    "seed":         42
+  },
+  "operating_point": { "referable_threshold": null, "frozen_on": null }
+}</code></pre>
+
+<h2>13.4 Working with AI coding assistants</h2>
+
+<p>The build is driven through Claude Code by two people. That is a legitimate strategy and MATLAB supports it well, since <code>matlab -batch "statement"</code> runs headlessly, logs to stdout and stderr, and exits non-zero on failure <span class="tag v">Verified</span> &mdash; which is exactly the loop an agent needs. Two failure modes need explicit countermeasures.</p>
+
+<table>
+<thead><tr><th style="width:30%">Failure mode</th><th>Countermeasure</th></tr></thead>
+<tbody>
+<tr><td><strong>Silent training failure.</strong> A model that collapses to the majority class raises no error. The agent reports success. Loss curves look fine.</td><td><strong>Build <code>eval/harness.m</code> before the first model.</strong> Make per-class recall and the confusion matrix print on every validation epoch. Add a unit test asserting that no class has zero recall on a smoke-test run. This is the single most important engineering practice in this document.</td></tr>
+<tr><td><strong>Inability to defend the work.</strong> At judging &mdash; and during the finale's live build with mentor checkpoints &mdash; you will be asked why a choice was made, not who typed it.</td><td><strong>This document is the countermeasure.</strong> Every decision here carries its reason. Rithviksai reads §1&ndash;§3, §11 and §17 closely, and the "design rationale" notes in §5&ndash;§9.</td></tr>
+</tbody>
+</table>
+
+<h4>Likely judge questions, and where the answer lives</h4>
+<table class="tight">
+<thead><tr><th style="width:52%">Question</th><th>Answer</th></tr></thead>
+<tbody>
+<tr><td>"Why 448&times;448 and not 224?"</td><td>§3.2 &mdash; microaneurysms are destroyed by downsampling</td></tr>
+<tr><td>"Which layer did you use for Grad-CAM, and why?"</td><td>§8.3 &mdash; final conv block, 14&times;14 at 448 input; multi-depth comparison included</td></tr>
+<tr><td>"How do you know your explanations are correct?"</td><td>§11.7 &mdash; lesion hit rate against IDRiD masks, deletion/insertion, sanity checks</td></tr>
+<tr><td>"Your accuracy is 94%. What's your sensitivity?"</td><td>§11.1 &mdash; we never report accuracy; here is sens/spec with CI</td></tr>
+<tr><td>"Did you tune on the test set?"</td><td>§10.4 &mdash; sealed set, frozen operating point with a recorded date</td></tr>
+<tr><td>"Can you detect neovascularisation?"</td><td>§6.6 &mdash; no pixel ground truth in the named datasets; here is what we do instead</td></tr>
+<tr><td>"What happens when the model is wrong?"</td><td>§4.2, §8.6 &mdash; three-way output with escalation on disagreement</td></tr>
+<tr><td>"How many graders does a district need?"</td><td>§9.5 E1 &mdash; from the SimEvents sweep</td></tr>
+</tbody>
+</table>
+
+<h1>14. Environment Setup</h1>
+
+<p class="lead">MATLAB has never been installed on the team's machine. Until <code>gpuDevice</code> returns the GPU, nothing else in this document can start. Treat this as the critical path.</p>
+
+<h2>14.1 Licensing</h2>
+
+<div class="box warn">
+<p style="margin-bottom:0">The $99 MATLAB and Simulink Student Suite <strong>does not include</strong> Deep Learning Toolbox, Computer Vision Toolbox, Medical Imaging Toolbox or SimEvents <span class="tag v">Verified</span>. The team has no institutional Campus-Wide License. There is therefore <strong>no default legal path</strong> to the required toolchain, and this must be solved before any other work begins.</p>
+</div>
+
+<table>
+<thead><tr><th style="width:8%">#</th><th style="width:24%">Action</th><th>Detail</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Start a 30-day trial</strong></td><td>Immediate unblock. Covers the internal round comfortably.</td></tr>
+<tr><td>2</td><td><strong>Email MathWorks India</strong></td><td>Cite SIH26038 and request participant licences. MathWorks has partnered with SIH since 2019 and provides mentorship and software support for its problem statements <span class="tag v">Verified</span>. Send this on day one so a reply arrives before the trial lapses.</td></tr>
+<tr><td>3</td><td>Check institutional access</td><td>Even without a Campus-Wide License, some institutions have limited departmental licences. Ask the department, not just the lab.</td></tr>
+</tbody>
+</table>
+
+<h4>Products to select on the trial</h4>
+<p>MATLAB · Simulink · Deep Learning Toolbox · Image Processing Toolbox · Computer Vision Toolbox · Medical Imaging Toolbox · SimEvents · Statistics and Machine Learning Toolbox · <strong>Parallel Computing Toolbox</strong></p>
+
+<p><strong>Parallel Computing Toolbox is not named in the PS tool list but is what enables GPU training.</strong> Omit it and you will train on CPU without understanding why everything takes twenty times longer.</p>
+
+<div class="box warn">
+<p style="margin-bottom:0"><strong>The trial clock is a real risk.</strong> A trial started on 21 August expires around 20 September. The SIH grand finale is considerably later. Action 2 is not optional &mdash; it is what carries you to the finale. Track the expiry date in the risk register.</p>
+</div>
+
+<h2>14.2 Installing on Arch Linux</h2>
+
+<p>MathWorks validates Ubuntu, Debian, RHEL and SUSE. Other distributions with kernel ≥ 4.18 and glibc ≥ 2.28 will "likely successfully run" MATLAB with limited support <span class="tag v">Verified</span>. Arch clears both thresholds comfortably. This is a support risk, not a technical blocker. The ArchWiki MATLAB page is the practical reference.</p>
+
+<h3>Two breakages you should expect</h3>
+
+<p><strong>1. Bundled library conflict.</strong> MATLAB ships its own <code>libstdc++</code> and <code>libfreetype</code>, which conflict with Arch's newer system versions and produce segmentation faults or corrupted fonts. Force the system libraries: <span class="tag v">Verified</span></p>
+<pre><code>export LD_PRELOAD=/usr/lib/libstdc++.so.6:/usr/lib/libfreetype.so.6</code></pre>
+
+<p><strong>2. Blank window under Wayland.</strong> MATLAB's Java-based interface renders as a blank grey window under Wayland compositors via XWayland unless AWT is told the window manager does not reparent: <span class="tag v">Verified</span></p>
+<pre><code>export _JAVA_AWT_WM_NONREPARENTING=1</code></pre>
+
+<p>Put both in a launcher script rather than typing them each session. You cannot avoid the GUI: App Designer and SimEvents both require it.</p>
+
+<h2>14.3 Smoke tests, in order</h2>
+
+<p><strong>Test 1 &mdash; CUDA works at all.</strong></p>
+<pre><code>matlab -batch "d = gpuDevice; disp(d.Name); disp(d.ComputeCapability); \
+A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
+<p>Expect the RTX 3050 and compute capability 8.6.</p>
+
+<p><strong>Test 2 &mdash; deep learning add-ons resolve.</strong> This forces a support-package download and confirms the toolbox licence is live.</p>
+<pre><code>matlab -batch "net = imagePretrainedNetwork('resnet50'); disp('DLT ok')"</code></pre>
+
+<p><strong>Test 3 &mdash; SimEvents is available.</strong></p>
+<pre><code>matlab -batch "simevents; disp('SimEvents ok')"</code></pre>
+
+<p>If all three pass, the environment is ready and the agent-driven build loop through <code>matlab -batch</code> can begin.</p>
+
+<h2>14.4 Hardware budget</h2>
+
+<table class="kv">
+<tbody>
+<tr><td>GPU</td><td>RTX 3050 laptop, 6 GB VRAM &mdash; the binding constraint on batch size</td></tr>
+<tr><td>RAM / storage</td><td>16 GB / 1 TB SSD &mdash; adequate</td></tr>
+<tr><td>Dataset scale</td><td>~6,000 images across the four named datasets. Fine-tuning at 448&times;448 is a matter of hours, not days.</td></tr>
+<tr><td>Cloud GPU</td><td><strong>Not on the critical path.</strong> Optional, for larger-scale pretraining only. Roughly ₹500&ndash;800 for a GPU-day. Note that a rented VM needs its own MATLAB activation, so check licence terms first.</td></tr>
+</tbody>
+</table>
+
+<h1>15. Risk Register</h1>
+
+<table class="tight">
+<thead><tr><th style="width:5%">ID</th><th style="width:26%">Risk</th><th style="width:8%">Lik.</th><th style="width:8%">Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td>R01</td><td><strong>MATLAB does not install or GPU unavailable</strong></td><td>Med</td><td><strong>Critical</strong></td><td>Run §14.3 smoke tests immediately. Known Arch fixes documented in §14.2. Blocks everything, so resolve first.</td></tr>
+<tr><td>R02</td><td><strong>Trial licence expires before the finale</strong></td><td><strong>High</strong></td><td><strong>Critical</strong></td><td>Email MathWorks on day one (§14.1 action 2). Record the expiry date and set a reminder two weeks ahead.</td></tr>
+<tr><td>R03</td><td>Messidor-2 access not granted in time</td><td>Med</td><td>High</td><td>Request on day one. Fallback: patient-disjoint IDRiD split as a weaker external set, labelled as such (§10.1).</td></tr>
+<tr><td>R04</td><td><strong>MA segmentation fails on very small training set</strong></td><td><strong>High</strong></td><td>Med</td><td>Track A classical morphological detector (§6.4) is built first and does not require training. Report both tracks.</td></tr>
+<tr><td>R05</td><td>Neovascularisation cannot be segmented &mdash; no ground truth</td><td><strong>Certain</strong></td><td>Med</td><td>Declared in §6.6 and §17.1. Mitigated by image-level PDR detection plus mandatory escalation of Level 4.</td></tr>
+<tr><td>R06</td><td>External validation misses the PS sens/spec targets</td><td>Med</td><td>Med</td><td>Anticipated in §10.5. Reported and analysed rather than tuned away. Reframed as the validation-rigour contribution (§11.4).</td></tr>
+<tr><td>R07</td><td>No clinician available for the reader study</td><td>Med</td><td>Med</td><td>Fallback in §12.5: present the protocol as designed-but-unrun, report automated proxies. Never fabricate ratings.</td></tr>
+<tr><td>R08</td><td><strong>Model silently collapses to majority class</strong></td><td>Med</td><td><strong>High</strong></td><td>Mandatory per-class recall logging and a zero-recall unit test (§13.4). The countermeasure is cheap; the failure is invisible without it.</td></tr>
+<tr><td>R09</td><td>Team cannot defend design choices at judging</td><td>Med</td><td><strong>High</strong></td><td>This document. Rithviksai owns §1&ndash;§3, §11, §17 and the rationale notes.</td></tr>
+<tr><td>R10</td><td>6 GB VRAM insufficient at target resolution</td><td>Med</td><td>Med</td><td>Reduce batch size before reducing resolution. Gradient accumulation if needed. Resolution is worth more than batch size here (§3.2).</td></tr>
+<tr><td>R11</td><td>Simulink component left to the last minute</td><td>Med</td><td>Med</td><td>Independent of all ML work. Start it on day one, in parallel (§9).</td></tr>
+<tr><td>R12</td><td>Self-inflicted train/inference preprocessing mismatch</td><td>Med</td><td><strong>High</strong></td><td>Single shared preprocessing function called from both paths (§5.4). Enforced by unit test.</td></tr>
+<tr><td>R13</td><td>Patient-level data leak between splits</td><td>Med</td><td><strong>High</strong></td><td>Patient-level splitting rule (§10.2), split file committed, unit test asserting no patient ID appears in two splits.</td></tr>
+<tr><td>R14</td><td>Only 2 of 6 team members actively building</td><td><strong>Certain</strong></td><td>Med</td><td>Accepted. Scope is set accordingly. Assign the SimEvents model and data curation to less technical members &mdash; both are high-visibility and need no ML.</td></tr>
+</tbody>
+</table>
+
+<h1>16. Schedule and Ownership</h1>
+
+<h2>16.1 Fixed dates</h2>
+
+<table class="kv">
+<tbody>
+<tr><td>21 Aug 2026</td><td>Licensing, GPU smoke test, dataset access requests</td></tr>
+<tr><td><strong>25 Aug 2026</strong></td><td><strong>College internal hackathon &mdash; working demo mandatory, SIH judging criteria</strong></td></tr>
+<tr><td>30 Aug 2026</td><td>SPOC team nomination deadline</td></tr>
+<tr><td><strong>15 Sept 2026</strong></td><td><strong>SIH portal idea submission deadline</strong></td></tr>
+<tr><td>Sept &rarr; finale</td><td>Full build: learned segmentation, sealed external validation, reader study, SimEvents sweeps</td></tr>
+</tbody>
+</table>
+
+<h2>16.2 Phase 1 &mdash; to 25 August: breadth over depth</h2>
+
+<p>Five components at demo fidelity beats one at research fidelity, because the judging rubric follows the PS's five requirements. Deliberately deferred: sparse BagNet, trained lesion segmentation, sealed external validation, reader study. Those become the roadmap slide, and a roadmap that names specific methods is itself a scoring signal.</p>
+
+<table>
+<thead><tr><th style="width:12%">Day</th><th style="width:44%">Build</th><th>In parallel</th></tr></thead>
+<tbody>
+<tr><td>21 Aug</td><td>Licensing; §14.3 smoke tests; download APTOS and IDRiD; request Messidor-2</td><td>Recruit remaining team members</td></tr>
+<tr><td>22 Aug</td><td>C1 quality gate &mdash; classical CV, no training. Start ResNet-50 fine-tune on APTOS.</td><td>SimEvents model skeleton</td></tr>
+<tr><td>23 Aug</td><td><code>gradCAM</code> + temperature calibration. Classical morphological MA detection for the lesion overlay.</td><td>SimEvents parameterisation and first sweep</td></tr>
+<tr><td>24 Aug</td><td>App Designer UI: image &rarr; quality verdict &rarr; grade &rarr; Grad-CAM &rarr; lesion overlay &rarr; referral slip. Integrate.</td><td>Slide deck</td></tr>
+<tr><td>25 Aug</td><td>Rehearse. Both presenters able to answer every question in §13.4.</td><td>&mdash;</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Demo honesty rule</h4>
+<p style="margin-bottom:0">If IDRiD ground-truth lesion masks are shown to illustrate what the evidence layer will look like once trained, <strong>label them as ground truth, not as model output</strong>. Judges catch this, and volunteering the distinction reads as rigour rather than weakness.</p>
+</div>
+
+<h2>16.3 Phase 2 &mdash; 26 August to 15 September</h2>
+<ul>
+<li>Trained lesion segmentation on IDRiD (Track B, §6.4&ndash;§6.5)</li>
+<li>Vessel segmentation on DRIVE</li>
+<li>Ordinal head, uncertainty estimation, deferral policy</li>
+<li>Evaluation harness complete, ablation configurations A1&ndash;A5 runnable</li>
+<li>SimEvents experiments E1&ndash;E6</li>
+<li>Reader study scheduled</li>
+<li>Portal submission drafted from §1, §2, §11, §17</li>
+</ul>
+
+<h2>16.4 Phase 3 &mdash; to the grand finale</h2>
+<ul>
+<li>Sparse BagNet arm and the XAI comparison of §11.7</li>
+<li>Operating point frozen and recorded in §11.2</li>
+<li><strong>Sealed set opened once</strong> (§10.4)</li>
+<li>Reader study executed and reported as a pilot</li>
+<li>Full ablation table and Pareto curve produced</li>
+</ul>
+
+<h2>16.5 Ownership</h2>
+
+<table>
+<thead><tr><th style="width:26%">Workstream</th><th style="width:20%">Owner</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Presentation and defence</td><td><strong>Rithviksai</strong></td><td>Must be present in every design conversation, not handed slides at the end</td></tr>
+<tr><td>ML pipeline (C1&ndash;C4)</td><td>Build pair</td><td>Driven through Claude Code; harness-first discipline per §13.4</td></tr>
+<tr><td>SimEvents model (C5)</td><td>Assignable to a non-ML member</td><td>No GPU, no data, no ML. High visibility. Start day one.</td></tr>
+<tr><td>Data curation and provenance</td><td>Assignable to a non-ML member</td><td>Access requests, §10.3 provenance log, quality-tier labelling</td></tr>
+<tr><td>Clinician liaison</td><td>Any member</td><td>One email, then scheduling. Owns §12.</td></tr>
+</tbody>
+</table>
+
+<h1>17. Known Limitations and Honest Disclosures</h1>
+
+<p class="lead">This section exists because the problem statement's central complaint is that existing solutions lack validation rigour. A limitations section that names real constraints is a direct answer to that complaint. Present it; do not bury it.</p>
+
+<h2>17.1 Neovascularisation</h2>
+<p>No pixel-level NV annotations exist in any of the four named datasets. We detect proliferative DR at image level through the classifier and use vessel-morphology proxy features as supporting indicators only. Every predicted Level 4 is escalated to a human regardless of confidence. <strong>We do not claim a validated NV detector.</strong> (§6.6)</p>
+
+<h2>17.2 Single-field imaging</h2>
+<p>Our pipeline grades single fundus photographs. The historical clinical reference standard for DR grading is seven-field stereoscopic photography. Single-field screening is standard practice and is what portable cameras produce, but it sees less retina, and peripheral pathology can be missed. This limits the ceiling on achievable sensitivity independently of model quality. <span class="tag k">Established</span></p>
+
+<h2>17.3 Label noise</h2>
+<p>APTOS grades are single-grader without adjudication. Inter-grader agreement on DR severity is imperfect even among specialists, so a portion of apparent model error is label disagreement rather than model failure. This particularly affects the Level 1 versus Level 2 boundary &mdash; which is unfortunately our referral threshold. Report 5-class confusion matrices so adjacent-grade confusions are visible rather than hidden inside an aggregate. <span class="tag k">Established</span></p>
+
+<h2>17.4 Not a medical device</h2>
+<p>This is a screening aid and a research prototype. It has not been through any regulatory process, has no CDSCO clearance, and must not be used for clinical decision-making. Every generated report carries this statement in its footer (§8.7). Say this in the presentation too &mdash; it signals that you understand the domain rather than diminishing the work.</p>
+
+<h2>17.5 Diabetic macular oedema not addressed</h2>
+<p>The PS scopes the task to the ICDR severity scale and does not require DME detection. Clinically, DME is a distinct and important cause of vision loss and is part of a complete referral decision. Our hard-exudate detection with fovea-distance measurement (§8.4) provides a partial proxy, but this is <strong>not</strong> a DME classifier. Named here so the scope boundary is explicit.</p>
+
+<h2>17.6 Reader study scale</h2>
+<p>Planned as a single-reader, ~20-case pilot. Reported as a pilot with confidence intervals, never as clinical validation. (§12.4)</p>
+
+<h2>17.7 Dataset representativeness</h2>
+<p>APTOS and IDRiD are Indian, which is favourable for our deployment target, but neither was collected under the field conditions the PS describes &mdash; handheld cameras, uncontrolled lighting, untrained operators. Our quality gate is designed for those conditions but is validated on data that largely does not contain them. Closing this gap requires field data we do not have.</p>
+
+<h2>17.8 Simulation is not deployment</h2>
+<p>The SimEvents model uses parameters partly measured from our own pipeline (rejection rate, inference latency, grader time) and partly assumed (arrival patterns, bandwidth, connectivity). It is a capacity-planning tool whose conclusions are conditional on those assumptions. State the assumptions alongside every result it produces.</p>
+
+<h1>18. References</h1>
+
+<h2>18.1 Verified during document preparation</h2>
+
+<p>Each of the following was consulted directly while writing this document. Claims tagged <span class="tag v">Verified</span> in the text trace to these.</p>
+
+<table class="tight">
+<thead><tr><th style="width:5%">#</th><th style="width:34%">Source</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td>V1</td><td><a href="https://www.mathworks.com/help/deeplearning/ug/deep-learning-visualization-methods.html">Deep Learning Visualization Methods</a> &mdash; MathWorks documentation</td><td>MATLAB provides exactly three image-explanation functions: <code>gradCAM</code>, <code>occlusionSensitivity</code>, <code>imageLIME</code> (§4.4, §8.2)</td></tr>
+<tr><td>V2</td><td><a href="https://www.mathworks.com/help/deeplearning/ref/gradcam.html"><code>gradCAM</code></a> &mdash; MathWorks function reference</td><td>Grad-CAM implementation and layer selection (§8.2, §8.3)</td></tr>
+<tr><td>V3</td><td><a href="https://www.mathworks.com/help/deeplearning/ref/occlusionsensitivity.html"><code>occlusionSensitivity</code></a> &mdash; MathWorks function reference</td><td>Occlusion sensitivity; regression support from R2024a (§8.2)</td></tr>
+<tr><td>V4</td><td><a href="https://www.mathworks.com/help/deeplearning/ug/understand-network-predictions-using-lime.html">Understand Network Predictions Using LIME</a> &mdash; MathWorks</td><td>Superpixel-based LIME for images (§8.2)</td></tr>
+<tr><td>V5</td><td><a href="https://journals.plos.org/digitalhealth/article?id=10.1371%2Fjournal.pdig.0000831">An inherently interpretable AI model improves screening speed and accuracy for early diabetic retinopathy</a> &mdash; <em>PLOS Digital Health</em>, 2025</td><td>Sparse BagNet architecture; lesion localisation precision 0.960 vs 0.656 for Guided Backpropagation; reader study 0.611 / 0.758 / 0.786; 11.7 s vs 15.2 s (§1.3, §8, §11.5). <strong>The single most important reference in this document.</strong></td></tr>
+<tr><td>V6</td><td><a href="https://www.mathworks.com/support/requirements/matlab-linux.html">Linux System Requirements</a> &mdash; MathWorks</td><td>Validated distributions; kernel ≥ 4.18 and glibc ≥ 2.28 for others (§14.2)</td></tr>
+<tr><td>V7</td><td><a href="https://www.mathworks.com/products/matlab/student.html">MATLAB for Students</a> &mdash; MathWorks</td><td>Student Suite contents; DLT / CVT / Medical Imaging / SimEvents are separate purchases (§4.4, §14.1)</td></tr>
+<tr><td>V8</td><td><a href="https://www.mathworks.com/products/simevents.html">SimEvents</a> &mdash; MathWorks product page</td><td>Entity Generator, Queue, Server, Resource Pool / Acquirer / Releaser, statistics blocks (§9.2)</td></tr>
+<tr><td>V9</td><td><a href="https://blogs.mathworks.com/student-lounge/">MathWorks Student Lounge</a> &mdash; SIH team write-ups</td><td>MathWorks has partnered with SIH since 2019; provides mentorship and software support (§14.1)</td></tr>
+<tr><td>V10</td><td><a href="https://wiki.archlinux.org/title/MATLAB">MATLAB</a> &mdash; ArchWiki, and Arch Linux Forums threads on the <code>libstdc++</code> conflict</td><td>Bundled library conflict and the <code>LD_PRELOAD</code> fix (§14.2)</td></tr>
+<tr><td>V11</td><td><a href="https://www.mathworks.com/help/matlab/ref/matlabwindows.html">MATLAB command options</a> &mdash; MathWorks</td><td><code>matlab -batch</code>: no desktop, logs to stdout/stderr, non-zero exit on failure (§13.4, §14.3)</td></tr>
+<tr><td>V12</td><td><code>_JAVA_AWT_WM_NONREPARENTING</code> &mdash; Wayland/XWayland Java AWT issue reports</td><td>Blank-window fix for MATLAB under Wayland compositors (§14.2)</td></tr>
+<tr><td>V13</td><td><a href="https://sih.gov.in/">Smart India Hackathon portal</a> &mdash; PS 26038 detail page</td><td>Problem statement text, organisation, category, theme, named datasets and toolboxes (§2.1)</td></tr>
+<tr><td>V14</td><td>SIH 2026 team eligibility rules</td><td>Six student members per team, at least one female member</td></tr>
+</tbody>
+</table>
+
+<h2>18.2 To be verified before citation</h2>
+
+<div class="box warn">
+<p style="margin-bottom:0">The references below are believed correct and are standard in the field, but were <strong>not</strong> confirmed against primary sources during document preparation. Each is tagged <span class="tag u">Unverified</span> where it appears in the text. <strong>Assign these, check them, and record the outcome in Appendix A before anything from them reaches a slide or the SIH submission.</strong></p>
+</div>
+
+<table class="tight">
+<thead><tr><th style="width:5%">#</th><th style="width:34%">Claim to verify</th><th>Likely source to check</th></tr></thead>
+<tbody>
+<tr><td>U1</td><td>IDx-DR pivotal trial sensitivity 87.2% / specificity 90.7% (§3.5)</td><td>Abràmoff et al., autonomous AI diagnostic system pivotal trial, <em>npj Digital Medicine</em>, 2018</td></tr>
+<tr><td>U2</td><td>EyeArt pivotal sensitivity ~96% / specificity ~88% (§3.5)</td><td>Eyenuk pivotal trial publication / FDA 510(k) summary</td></tr>
+<tr><td>U3</td><td>~101 million adults with diabetes in India (§2.4)</td><td>ICMR-INDIAB national study, <em>Lancet Diabetes &amp; Endocrinology</em>, 2023</td></tr>
+<tr><td>U4</td><td>Saliency-map sanity checks; which methods fail parameter randomisation (§11.7)</td><td>Adebayo et al., "Sanity Checks for Saliency Maps", NeurIPS 2018</td></tr>
+<tr><td>U5</td><td>Deletion / insertion AUC as a saliency faithfulness metric (§11.7)</td><td>Petsiuk et al., "RISE: Randomized Input Sampling for Explanation", 2018</td></tr>
+<tr><td>U6</td><td>BagNet limited-receptive-field architecture (§1.3, §8)</td><td>Brendel &amp; Bethge, "Approximating CNNs with Bag-of-local-Features models…", ICLR 2019</td></tr>
+<tr><td>U7</td><td>Field image-rejection rate in the Thailand DR deployment study (§5.1)</td><td>Beede et al., human-centred evaluation of a deployed DR system, CHI 2020</td></tr>
+<tr><td>U8</td><td>Exact dataset sizes and split conventions: APTOS, IDRiD, DRIVE, Messidor-2 (§10.1)</td><td><strong>Confirm from the actual downloads.</strong> Fastest and most reliable check on this list.</td></tr>
+<tr><td>U9</td><td>Quadratic weighted kappa as the APTOS 2019 competition metric (§11.3)</td><td>Kaggle APTOS 2019 competition evaluation page</td></tr>
+<tr><td>U10</td><td>AUPR as the IDRiD lesion segmentation benchmark metric (§6.4)</td><td>IDRiD challenge documentation</td></tr>
+<tr><td>U11</td><td>Local colour normalisation preprocessing and its attribution (§7.2)</td><td>Kaggle Diabetic Retinopathy Detection 2015 winning solution write-ups. <strong>Describe the method; do not attribute it to a named individual without checking.</strong></td></tr>
+<tr><td>U12</td><td>Retinal models can predict non-pathological attributes from fundus images (§4.2, §8.6)</td><td>Poplin et al., cardiovascular risk factor prediction from retinal fundus photographs, <em>Nature Biomedical Engineering</em>, 2018</td></tr>
+</tbody>
+</table>
+
+<h1>Appendix A &mdash; Unverified Claims Register</h1>
+
+<p class="lead">Print this page. Assign each row. Nothing tagged Unverified appears in the SIH submission until its row is signed off, or the claim is deleted.</p>
+
+<table class="tight">
+<thead><tr><th style="width:6%">Ref</th><th style="width:36%">Claim</th><th style="width:10%">Section</th><th style="width:14%">Assigned to</th><th style="width:12%">Checked</th><th>Outcome</th></tr></thead>
+<tbody>
+<tr><td>U1</td><td>IDx-DR 87.2% / 90.7%</td><td>§3.5</td><td></td><td></td><td></td></tr>
+<tr><td>U2</td><td>EyeArt ~96% / ~88%</td><td>§3.5</td><td></td><td></td><td></td></tr>
+<tr><td>U3</td><td>India ~101M adults with diabetes</td><td>§2.4</td><td></td><td></td><td></td></tr>
+<tr><td>U4</td><td>Saliency sanity-check failures</td><td>§11.7</td><td></td><td></td><td></td></tr>
+<tr><td>U5</td><td>Deletion/insertion AUC</td><td>§11.7</td><td></td><td></td><td></td></tr>
+<tr><td>U6</td><td>BagNet architecture reference</td><td>§1.3</td><td></td><td></td><td></td></tr>
+<tr><td>U7</td><td>Thailand deployment rejection rate</td><td>§5.1</td><td></td><td></td><td></td></tr>
+<tr><td>U8</td><td><strong>Dataset sizes and splits</strong></td><td>§10.1</td><td></td><td></td><td></td></tr>
+<tr><td>U9</td><td>APTOS metric = QWK</td><td>§11.3</td><td></td><td></td><td></td></tr>
+<tr><td>U10</td><td>IDRiD metric = AUPR</td><td>§6.4</td><td></td><td></td><td></td></tr>
+<tr><td>U11</td><td>Colour normalisation attribution</td><td>§7.2</td><td></td><td></td><td></td></tr>
+<tr><td>U12</td><td>Non-pathological attribute prediction</td><td>§4.2</td><td></td><td></td><td></td></tr>
+<tr><td>&mdash;</td><td>DRIVE 20/20 split sizes</td><td>§6.3</td><td></td><td></td><td></td></tr>
+<tr><td>&mdash;</td><td>APTOS class distribution</td><td>§7.4</td><td></td><td></td><td></td></tr>
+<tr><td>&mdash;</td><td>SIH judging theme bucket for PS 26038</td><td>§2.1</td><td></td><td></td><td></td></tr>
+</tbody>
+</table>
+
+<p class="small">U8 and the APTOS class distribution are the highest priority: both are answered in minutes by inspecting the downloaded files, and both appear in the pitch.</p>
+
+<h1>Appendix B &mdash; Day One Checklist</h1>
+
+<p class="lead">Everything on this page is blocking, and none of it depends on any design decision. Work top to bottom.</p>
+
+<table>
+<thead><tr><th style="width:6%">☐</th><th style="width:32%">Action</th><th style="width:14%">Owner</th><th>Why it is blocking</th></tr></thead>
+<tbody>
+<tr><td>☐</td><td><strong>Start the 30-day MathWorks trial</strong> with all nine products from §14.1, <strong>including Parallel Computing Toolbox</strong></td><td></td><td>Nothing else can begin</td></tr>
+<tr><td>☐</td><td><strong>Email MathWorks India</strong> citing SIH26038, requesting participant licences</td><td></td><td>The trial expires around 20 Sept; the finale is later (R02)</td></tr>
+<tr><td>☐</td><td>Install MATLAB; apply both §14.2 fixes in a launcher script</td><td></td><td>Known Arch and Wayland breakages</td></tr>
+<tr><td>☐</td><td><strong>Run §14.3 smoke tests 1, 2 and 3</strong></td><td></td><td>Confirms GPU, deep learning toolbox and SimEvents all work (R01)</td></tr>
+<tr><td>☐</td><td>Download APTOS 2019 and IDRiD</td><td></td><td>Training data</td></tr>
+<tr><td>☐</td><td><strong>Request Messidor-2 access</strong> (licence agreement, can take days)</td><td></td><td>Sealed external test set (R03)</td></tr>
+<tr><td>☐</td><td>Download DRIVE</td><td></td><td>Vessel segmentation</td></tr>
+<tr><td>☐</td><td>Create <code>data/PROVENANCE.md</code>; record sizes, dates, licences, hashes</td><td></td><td>§10.3; also answers Appendix A rows U8 and the class distribution</td></tr>
+<tr><td>☐</td><td>Confirm the SIH judging theme bucket with the SPOC</td><td></td><td>Portal lists this MedTech PS under Clean &amp; Green Technology (§2.1)</td></tr>
+<tr><td>☐</td><td><strong>Open the SimEvents workstream</strong> &mdash; independent of all ML work</td><td></td><td>R11; highest return per hour in the PS</td></tr>
+<tr><td>☐</td><td>Email an ophthalmology department to request one reader for two hours</td><td></td><td>§12; long lead time, one email</td></tr>
+<tr><td>☐</td><td><strong>Write <code>eval/harness.m</code> before the first model</strong></td><td></td><td>R08 &mdash; the most important engineering practice in this document</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>The three things that decide this project</h4>
+<ol style="margin-bottom:0">
+<li><strong>Get MATLAB running today.</strong> Everything is downstream of a working <code>gpuDevice</code>.</li>
+<li><strong>Build the evaluation harness before the first model.</strong> A model that silently collapses to the majority class raises no error, and an AI-driven build loop will report it as success.</li>
+<li><strong>Never report a number you did not measure.</strong> The problem statement's own complaint is that existing solutions lack validation rigour. Being the team whose numbers are real, whose external result is reported honestly, and whose limitations are stated openly is not a consolation strategy &mdash; on this problem statement, it is the winning one.</li>
+</ol>
+</div>
+
+</body>
+</html>
