@@ -1,4 +1,12 @@
 classdef TestDataSplits < matlab.unittest.TestCase
+    methods (TestClassSetup)
+        function addSourcePath(~)
+            testFile = which('TestDataSplits');
+            projectRoot = fileparts(fileparts(testFile));
+            addpath(genpath(fullfile(projectRoot, 'src')));
+        end
+    end
+
     methods (Test)
         function testNoPatientOverlap(testCase)
             [~, splitDir] = TestDataSplits.paths();
@@ -101,4 +109,3 @@ classdef TestDataSplits < matlab.unittest.TestCase
         end
     end
 end
-
