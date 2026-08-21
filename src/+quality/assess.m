@@ -17,7 +17,7 @@ features = quality.qualityFeatures(image, mask, config);
 
 processedImage = image;
 isEnhanced = false;
-if strcmp(qualityClass, 'borderline')
+if strcmp(qualityClass, 'borderline') && config.enhancementEnabled
     processedImage = quality.enhanceBorderline(image, mask, config);
     isEnhanced = true;
 end

@@ -27,7 +27,9 @@ config = struct( ...
     'entropyBorderline', 2.5, ...
     'illuminationCvUngradable', 0.45, ...
     'illuminationCvBorderline', 0.25, ...
-    'denoiseDegree', 0.005);
+    'denoiseDegree', 0.005, ...
+    'enhancementEnabled', true, ...
+    'claheEnabled', true);
 
 if nargin == 0 || isempty(inputConfig)
     return;
@@ -55,11 +57,14 @@ for index = 1:numel(names)
     name = names{index};
     if isfield(config, name)
         value = inputConfig.(name);
-        if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value)
+        if islogical(value) && isscalar(value)
+            config.(name) = value;
+        elseif ~isnumeric(value) || ~isscalar(value) || ~isfinite(value)
             error('quality:InvalidConfig', ...
                 'Quality configuration value %s must be a finite scalar.', name);
+        else
+            config.(name) = double(value);
         end
-        config.(name) = double(value);
     end
 end
 end

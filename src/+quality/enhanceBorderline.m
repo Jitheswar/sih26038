@@ -30,7 +30,7 @@ normalizedGreen = green - background + backgroundMean;
 normalizedGreen = min(max(normalizedGreen, 0), 1);
 
 % CLAHE is contrast-limited to avoid turning sensor noise into lesions.
-if min(size(normalizedGreen)) >= 8
+if config.claheEnabled && min(size(normalizedGreen)) >= 8
     enhancedGreen = adapthisteq(normalizedGreen, ...
         'NumTiles', [8, 8], 'ClipLimit', 0.01, 'Distribution', 'rayleigh');
 else

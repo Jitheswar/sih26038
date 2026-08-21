@@ -1,6 +1,21 @@
 function result = infer(varargin)
-%INFER Placeholder for the grading inference entry point.
+%INFER Placeholder grading entry point with the shared input seam wired in.
 
 rng(42);
 result = struct('status', 'placeholder');
+if nargin == 0 || ~localIsImage(varargin{1})
+    return;
+end
+
+config = [];
+if nargin >= 2
+    config = varargin{2};
+end
+[result.preprocessedImage, result.qualityMetadata, ...
+    result.preprocessingMetadata] = common.preprocess( ...
+    varargin{1}, config, 'inference');
+end
+
+function result = localIsImage(value)
+result = (isnumeric(value) || islogical(value)) && ~isempty(value);
 end
