@@ -1,28 +1,106 @@
 # Dataset provenance
 
-Recorded 2026-08-22 from the downloaded archives in `data/raw/`.
-The download date is the local filesystem creation date because no downloader log was retained.
-File counts exclude directory entries inside ZIP files.
-`Archive size` is the exact ZIP byte count; `uncompressed size` is the sum of the member file sizes reported by `unzip -l`.
-Hashes are SHA-256 values of the ZIP files themselves.
+Recorded on 2026-08-22 from the archives and extracted files present in `data/raw/`.
+
+The actual download time was not recorded, so the date below is the local filesystem creation date of each archive.
+
+Archive file counts exclude directory entries and count only archive members that are files.
+
+Archive size is the exact byte size of the archive, and SHA-256 is computed over the archive itself.
+
 No image pixels were modified before extraction or use.
 
-## Archives
+## APTOS 2019 Blindness Detection
 
-| Archive | Dataset / role | Source URL | Download date | Licence / terms | Files | Archive size | Uncompressed size | SHA-256 |
-|---|---|---|---|---|---:|---:|---:|---|
-| `aptos2019-blindness-detection.zip` | APTOS 2019 Blindness Detection; 3,662 labelled training images, 1,928 public test images, and CSV metadata | [Kaggle competition data page](https://www.kaggle.com/competitions/aptos2019-blindness-detection/data) | 2026-08-22 | Kaggle lists the data as **Subject to Competition Rules**; no standalone licence file is present in the archive. Use is limited to the accepted competition terms. | 5,593 | 10,215,289,875 bytes | 10,216,919,325 bytes | `18036845ab76b68d305d6e2dbbaaaf5cd23926be740e1297a8972ac1c6360976` |
-| `A. Segmentation.zip` | IDRiD lesion segmentation data, including original images, lesion masks, optic-disc masks, and licence text | [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid) | 2026-08-22 | **CC BY 4.0**, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice. | 446 | 584,315,841 bytes | 584,181,727 bytes | `f9a7fc0f7d228e326ca8ba61cfc99d54de689c52e44f52bde9917c78b07a1eaf` |
-| `B. Disease Grading.zip` | IDRiD disease-grading data, including 516 image-level labels and DME risk labels | [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid) | 2026-08-22 | **CC BY 4.0**, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice. | 520 | 212,405,123 bytes | 212,276,527 bytes | `8a9f4752b35d74cc35ff48b21ad44f295a6f800110ec218fc2d1c264803e4d8c` |
-| `C. Localization.zip` | IDRiD optic-disc and fovea localisation data, including coordinate markups and licence text | [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid) | 2026-08-22 | **CC BY 4.0**, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice. | 522 | 212,510,246 bytes | 212,383,600 bytes | `b80f37a470848c83e9486797d23e453aa0521ec2376966150aef7730fc673e0d` |
-| `training.zip` | DRIVE training split, 20 retinal images and manual vessel annotations | [DRIVE official dataset page](https://drive.grand-challenge.org/DRIVE/) | 2026-08-22 | The official page describes the database as a research benchmarking resource but does not state an SPDX-style licence; the archive contains no licence file. Treat it as research-use data, preserve attribution to Staal et al. (2004), and do not redistribute without confirming the source terms. | 60 | 14,772,347 bytes | 15,094,739 bytes | `7101e19598e2b7aacdbd5e6e7575057b9154a4aaec043e0f4e28902bf4e2e209` |
-| `test.zip` | DRIVE test split, 20 retinal images, masks, and circulated manual vessel annotations | [DRIVE official dataset page](https://drive.grand-challenge.org/DRIVE/) | 2026-08-22 | The official page describes the database as a research benchmarking resource but does not state an SPDX-style licence; the archive contains no licence file. Treat it as research-use data, preserve attribution to Staal et al. (2004), and do not redistribute without confirming the source terms. | 40 | 14,571,523 bytes | 14,883,946 bytes | `d76c95c98a0353487ffb63b3bb2663c00ed1fde7d8fdfd8c3282c6e310a02731` |
-| `messidor2-dr-grades.zip` | MESSIDOR-2 DR Grades; adjudicated ICDR grades, DME grades, and gradability for the 1,748-image MESSIDOR-2 image set | [Kaggle data card](https://www.kaggle.com/datasets/google-brain/messidor2-dr-grades) | 2026-08-22 | Kaggle lists this grade-set data card as **CC0: Public Domain**. The archive also includes the required Krause et al. citation and documents that ungradable images have no DR/DME grade. This is a grade set, not the official MESSIDOR-2 image release. | 2 | 7,531 bytes | 49,964 bytes | `84809fc59541313be6cf57ed9209516eaf5a1514949669eed72dc9561917021d` |
+- Source URL: [Kaggle competition data page](https://www.kaggle.com/competitions/aptos2019-blindness-detection/data).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: Kaggle marks the data as subject to the competition rules, and the archive contains no standalone licence file.
+- Number of files: 5,593 archive files, comprising 3,662 labelled training images, 1,928 public test images, and three CSV files.
+- Archive size: 10,215,289,875 bytes.
+- SHA-256: `18036845ab76b68d305d6e2dbbaaaf5cd23926be740e1297a8972ac1c6360976`.
+- Labels available: `train.csv` provides image-level severity labels 0 to 4, named No DR, Mild, Moderate, Severe, and Proliferative DR; the public test images are unlabelled.
+- Intended project role: Primary training, validation, calibration, and internal test data because it is an Indian dataset and the closest available proxy for the intended deployment setting.
+- Patient identifier note: The supplied metadata has only `id_code` and `diagnosis`, with no patient or examination identifier.
+
+The fixed split files therefore use each unique APTOS `id_code` as a conservative `patient_id` surrogate.
+
+This proves separation of all supplied identifiers, but a stronger bilateral-eye patient guarantee would require patient metadata from the dataset provider.
+
+## IDRiD segmentation package
+
+- Source URL: [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: Creative Commons Attribution 4.0 International, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice.
+- Number of files: 446 archive files.
+- Archive size: 584,315,841 bytes.
+- SHA-256: `f9a7fc0f7d228e326ca8ba61cfc99d54de689c52e44f52bde9917c78b07a1eaf`.
+- Labels available: 81 original fundus images, pixel masks for microaneurysms, haemorrhages, hard exudates, and soft exudates, plus optic-disc masks.
+- Intended project role: Lesion supervision and explanation-quality ground truth, not part of the APTOS development split files.
+
+## IDRiD disease-grading package
+
+- Source URL: [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: Creative Commons Attribution 4.0 International, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice.
+- Number of files: 520 archive files.
+- Archive size: 212,405,123 bytes.
+- SHA-256: `8a9f4752b35d74cc35ff48b21ad44f295a6f800110ec218fc2d1c264803e4d8c`.
+- Labels available: 516 image-level ICDR disease grades and diabetic macular oedema risk labels, split by the dataset into 413 training and 103 testing images.
+- Intended project role: Secondary grading reference and future lesion or explanation analysis, not part of the APTOS development split files.
+
+## IDRiD localisation package
+
+- Source URL: [IDRiD official data page](https://idrid.grand-challenge.org/Data/) and [IEEE DataPort record](https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: Creative Commons Attribution 4.0 International, stated in the included `LICENSE.txt` and `CC-BY-4.0.txt`; retain attribution and the licence notice.
+- Number of files: 522 archive files.
+- Archive size: 212,510,246 bytes.
+- SHA-256: `b80f37a470848c83e9486797d23e453aa0521ec2376966150aef7730fc673e0d`.
+- Labels available: Optic-disc centre and fovea centre coordinate markups for the IDRiD image sets.
+- Intended project role: Anatomical localisation supervision and future preprocessing or explanation analysis, not part of the APTOS development split files.
+
+## DRIVE training split
+
+- Source URL: [DRIVE official dataset page](https://drive.grand-challenge.org/DRIVE/).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: The official page describes DRIVE as a research benchmarking resource but does not state an SPDX-style licence, and the archive contains no licence file.
+- Number of files: 60 archive files, comprising 20 retinal images and their manual vessel annotations and masks.
+- Archive size: 14,772,347 bytes.
+- SHA-256: `7101e19598e2b7aacdbd5e6e7575057b9154a4aaec043e0f4e28902bf4e2e209`.
+- Labels available: Pixel-level retinal vessel annotations and field-of-view masks; no ICDR grading labels.
+- Intended project role: Vessel segmentation training and benchmarking using the dataset's official training split.
+
+## DRIVE test split
+
+- Source URL: [DRIVE official dataset page](https://drive.grand-challenge.org/DRIVE/).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: The official page describes DRIVE as a research benchmarking resource but does not state an SPDX-style licence, and the archive contains no licence file.
+- Number of files: 40 archive files, comprising 20 retinal images, masks, and circulated manual vessel annotations.
+- Archive size: 14,571,523 bytes.
+- SHA-256: `d76c95c98a0353487ffb63b3bb2663c00ed1fde7d8fdfd8c3282c6e310a02731`.
+- Labels available: Pixel-level retinal vessel annotations and field-of-view masks; no ICDR grading labels.
+- Intended project role: Vessel segmentation benchmarking using DRIVE's official test split, not part of the APTOS development split files.
+
+## MESSIDOR-2 DR Grades metadata
+
+- Source URL: [Google Brain MESSIDOR-2 DR Grades data card](https://www.kaggle.com/datasets/google-brain/messidor2-dr-grades).
+- Download date: 2026-08-22 based on local filesystem metadata; the original download log is unavailable.
+- Licence or usage conditions: The Kaggle data card lists the grade metadata as CC0 Public Domain and the included README requests citation of Krause et al. (2018).
+- Number of files: 2 archive files, `messidor_data.csv` and `messidor_readme.txt`.
+- Archive size: 7,531 bytes.
+- SHA-256: `84809fc59541313be6cf57ed9209516eaf5a1514949669eed72dc9561917021d`.
+- Labels available: Adjudicated five-point ICDR grades, referable DME grades, and gradability flags for the MESSIDOR-2 image identifiers.
+- Intended project role: Metadata for the sealed external evaluation only.
+
+This archive contains grade metadata, not the official MESSIDOR-2 image release.
+
+It is excluded from all development split files, and no contents of `data/sealed/` were read or extracted.
 
 ## APTOS class distribution
 
-The counts below were recomputed from `data/raw/aptos2019/train.csv` with the `diagnosis` column, not copied from a web summary.
-The exact total is 3,662 rows.
+The counts below were independently recomputed from `data/raw/aptos2019/train.csv` with MATLAB using the `diagnosis` column.
+
+The exact total is 3,662 labelled training images.
 
 | ICDR level | Label | Count | Exact share | Rounded share |
 |---:|---|---:|---:|---:|
@@ -33,14 +111,14 @@ The exact total is 3,662 rows.
 | 4 | Proliferative DR | 295 | 295 / 3662 = 8.05570726% | 8.06% |
 | **Total** |  | **3,662** | **100%** | **100%** |
 
-The five counts sum to 3,662 and are the values recorded in §7.4 of `docs/SIH26038_design.html`.
+The five counts sum to 3,662.
 
 ## Reproduction commands
 
 ```bash
-awk -F, 'NR>1 {count[$2]++} END {for (i=0;i<=4;i++) print i, count[i]+0; print "total", NR-1}' data/raw/aptos2019/train.csv
 sha256sum data/raw/*.zip
 ```
 
 The extracted directories are working copies of the archive contents.
+
 No resizing, relabelling, image enhancement, or other preprocessing was applied while creating this provenance record.

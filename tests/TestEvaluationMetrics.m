@@ -1,6 +1,15 @@
 classdef TestEvaluationMetrics < matlab.unittest.TestCase
     %TESTEVALUATIONMETRICS Behavioral tests for the evaluation harness.
 
+    methods (TestClassSetup)
+        function addEvaluationPaths(~)
+            testFile = which('TestEvaluationMetrics');
+            projectRoot = fileparts(fileparts(testFile));
+            addpath(fullfile(projectRoot, 'eval'));
+            addpath(fullfile(projectRoot, 'eval', 'metrics'));
+        end
+    end
+
     methods (Test)
         function perfectFiveClassPredictions(testCase)
             actual = 0:4;
