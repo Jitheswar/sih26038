@@ -16,7 +16,7 @@ end
 if nargin == 0
     error('grade:MissingConfig', 'A grading configuration is required.');
 end
-[mode, resultsRoot] = localOptions(varargin{2:end});
+[mode, resultsRoot, evaluateTest] = localOptions(varargin{2:end});
 [config, configText, projectRoot] = readConfiguration(varargin{1});
 addpath(fullfile(projectRoot, 'eval'));
 addpath(fullfile(projectRoot, 'eval', 'metrics'));
@@ -155,7 +155,8 @@ save(fullfile(resultsDirectory, 'training_history.mat'), ...
     'history', 'config', '-v7.3');
 
 testMetric = [];
-if strcmp(mode, "normal")
+testEvaluated = strcmp(mode, "normal") && evaluateTest;
+if testEvaluated
     checkpoint = load(bestCheckpoint, 'net');
     net = checkpoint.net;
     testQueue = createMiniBatchQueue(stores.test, selectedData.test.grades, ...
@@ -174,7 +175,7 @@ result.resultsDirectory = string(resultsDirectory);
 result.bestCheckpoint = string(bestCheckpoint);
 result.testMetrics = testMetric;
 result.gpuUsed = environment == "gpu";
-result.checkpointSelection.testUsed = false;
+result.checkpointSelection.testUsed = testEvaluated;
 result.checkpointSelection.bestEpoch = bestEpoch;
 end
 
@@ -203,6 +204,10 @@ metric = struct( ...
     'perClassRecall', NaN(5, 1), ...
     'sensitivity', NaN, ...
     'specificity', NaN, ...
+    'sensitivityCILower', NaN, ...
+    'sensitivityCIUpper', NaN, ...
+    'specificityCILower', NaN, ...
+    'specificityCIUpper', NaN, ...
     'n', 0, ...
     'referableThreshold', 2, ...
     'zeroRecallLevels', zeros(0, 1), ...
@@ -213,10 +218,11 @@ function metric = localMetricForHistory(metric)
 metric = rmfield(metric, {'actualLabels', 'predictedLabels', 'probabilities'});
 end
 
-function [mode, resultsRoot] = localOptions(varargin)
+function [mode, resultsRoot, evaluateTest] = localOptions(varargin)
 parser = inputParser;
 parser.addParameter('Mode', 'normal');
 parser.addParameter('ResultsRoot', '');
+parser.addParameter('EvaluateTest', false);
 parser.parse(varargin{:});
 mode = lower(string(parser.Results.Mode));
 if ~ismember(mode, ["normal", "smoke", "inspect"])
@@ -229,6 +235,7 @@ if strlength(resultsRoot) == 0
     resultsRoot = string(fullfile(projectRoot, 'results'));
 end
 resultsRoot = char(resultsRoot);
+evaluateTest = logical(parser.Results.EvaluateTest);
 end
 
 function directory = localResultsDirectory(resultsRoot)

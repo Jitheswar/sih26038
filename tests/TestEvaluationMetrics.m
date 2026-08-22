@@ -71,6 +71,70 @@ classdef TestEvaluationMetrics < matlab.unittest.TestCase
             testCase.verifyEmpty(strfind(lower(output), 'accuracy')); %#ok<STREMP>
         end
 
+        function wilsonIntervalsMatchHandComputedBoundsForRegularCase(testCase)
+            actual = [0 1 2 3 4 0 1 2 3 4];
+            predicted = [1 2 3 4 0 0 1 2 3 4];
+
+            metrics = referableMetrics(actual, predicted);
+
+            testCase.verifyEqual(metrics.sensitivityCILower, 0.4364905634, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.sensitivityCIUpper, 0.9699474141, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.specificityCILower, 0.3006360524, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.specificityCIUpper, 0.9544139374, 'AbsTol', 1e-8);
+        end
+
+        function wilsonIntervalsMatchHandComputedBoundsForZeroOverNCase(testCase)
+            actual = [0 0 2 2];
+            predicted = [0 0 0 0];
+
+            metrics = referableMetrics(actual, predicted);
+
+            testCase.verifyEqual(metrics.sensitivity, 0);
+            testCase.verifyEqual(metrics.sensitivityCILower, 0, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.sensitivityCIUpper, 0.6576280471, 'AbsTol', 1e-8);
+
+            testCase.verifyEqual(metrics.specificity, 1);
+            testCase.verifyEqual(metrics.specificityCILower, 0.3423719529, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.specificityCIUpper, 1, 'AbsTol', 1e-8);
+        end
+
+        function wilsonIntervalsMatchHandComputedBoundsForNOverNCase(testCase)
+            actual = [0 0 2 2];
+            predicted = [2 2 2 2];
+
+            metrics = referableMetrics(actual, predicted);
+
+            testCase.verifyEqual(metrics.sensitivity, 1);
+            testCase.verifyEqual(metrics.sensitivityCILower, 0.3423719529, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.sensitivityCIUpper, 1, 'AbsTol', 1e-8);
+
+            testCase.verifyEqual(metrics.specificity, 0);
+            testCase.verifyEqual(metrics.specificityCILower, 0, 'AbsTol', 1e-8);
+            testCase.verifyEqual(metrics.specificityCIUpper, 0.6576280471, 'AbsTol', 1e-8);
+        end
+
+        function wilsonIntervalsAreNaNWhenDenominatorIsZero(testCase)
+            actual = [2 2];
+            predicted = [2 2];
+
+            metrics = referableMetrics(actual, predicted);
+
+            testCase.verifyTrue(isnan(metrics.specificity));
+            testCase.verifyTrue(isnan(metrics.specificityCILower));
+            testCase.verifyTrue(isnan(metrics.specificityCIUpper));
+        end
+
+        function harnessPrintsWilsonIntervalsAndCounts(testCase)
+            actual = [0 0 2 2];
+            predicted = [0 0 0 0];
+
+            output = evalc('harness(actual, predicted);');
+
+            testCase.verifyNotEmpty(strfind(output, 'Wilson CI')); %#ok<STREMP>
+            testCase.verifyNotEmpty(strfind(output, '0/2')); %#ok<STREMP>
+            testCase.verifyNotEmpty(strfind(output, '2/2')); %#ok<STREMP>
+        end
+
         function referableThresholdStartsAtLevelTwo(testCase)
             actual = [0 1 2 3 4];
             predicted = [0 1 1 3 4];

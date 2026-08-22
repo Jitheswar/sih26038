@@ -81,6 +81,36 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 find(result.history.validation(1).perClassRecall == 0) - 1);
             testCase.verifyFalse(result.checkpointSelection.testUsed);
         end
+
+        function normalModeWithDefaultOptionsNeverConstructsTestQueue(testCase)
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
+            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            config.training.max_epochs = 1;
+
+            output = evalc(['result = grade.train(config, ''Mode'', ''normal'', ' ...
+                '''ResultsRoot'', resultsRoot);']);
+
+            testCase.verifyFalse(result.checkpointSelection.testUsed);
+            testCase.verifyEmpty(result.testMetrics);
+            testCase.verifyEmpty(strfind(output, 'TEST epoch')); %#ok<STREMP>
+            testCase.verifyFalse(isfile( ...
+                fullfile(char(result.resultsDirectory), 'test_metrics.mat')));
+        end
+
+        function normalModeWithEvaluateTestOptedInConstructsTestQueue(testCase)
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
+            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            config.training.max_epochs = 1;
+
+            output = evalc(['result = grade.train(config, ''Mode'', ''normal'', ' ...
+                '''ResultsRoot'', resultsRoot, ''EvaluateTest'', true);']);
+
+            testCase.verifyTrue(result.checkpointSelection.testUsed);
+            testCase.verifyNotEmpty(result.testMetrics);
+            testCase.verifyNotEmpty(strfind(output, 'TEST epoch')); %#ok<STREMP>
+        end
     end
 
     methods (Static, Access = private)
