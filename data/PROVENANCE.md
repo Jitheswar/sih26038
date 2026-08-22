@@ -94,7 +94,23 @@ This proves separation of all supplied identifiers, but a stronger bilateral-eye
 
 This archive contains grade metadata, not the official MESSIDOR-2 image release.
 
-It is excluded from all development split files, and no contents of `data/sealed/` were read or extracted.
+It is excluded from all development split files, and no contents of the grade CSV were read while cataloguing or moving this archive.
+
+### Move under seal, recorded 2026-08-22
+
+This archive and its extracted contents were downloaded to `data/raw/messidor2-dr-grades.zip` and `data/raw/messidor2_grades/` (unsealed), where they had been sitting exposed to the working tree rather than access-controlled as §10.4 requires.
+
+On 2026-08-22 the following were moved, unread, to bring them under the seal:
+
+- `data/raw/messidor2-dr-grades.zip` &rarr; `data/sealed/messidor2-dr-grades.zip`
+- `data/raw/messidor2_grades/messidor_data.csv` &rarr; `data/sealed/messidor2_grades/messidor_data.csv`
+- `data/raw/messidor2_grades/messidor_readme.txt` &rarr; `data/sealed/messidor2_grades/messidor_readme.txt`
+
+The grade CSV's contents were not read or opened as part of this move, consistent with §10.4: development uses train / validation / calibration only, and the sealed set is opened once, by the named key-holder, after the operating point is frozen and dated.
+
+`data/raw/` no longer contains any Messidor-2 material.
+
+A regression test, `tests/TestSealedDataProtection.m`, asserts this and asserts that the pipeline's existing sealed-path guards (in `app.runScreeningCase`, `explain.gradcam`, `grade.fitTemperature`, and `report.generate`) reject paths under `data/sealed/`.
 
 ## APTOS class distribution
 
