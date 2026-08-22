@@ -36,5 +36,14 @@
   "data": {
     "dataset": "APTOS"
   },
-  "operating_point": { "referable_threshold": null, "frozen_on": null }
+  "operating_point": { "referable_threshold": null, "frozen_on": null },
+  "decision_policy": {
+    "referableThreshold": 0.70,
+    "autoClearThreshold": 0.20,
+    "uncertaintyThreshold": 0.50,
+    "requireEvidenceForAutoClear": true,
+    "alwaysEscalateLevel4": true,
+    "escalateOnUnknownEvidence": true,
+    "escalateOnExplanationDisagreement": true
+  }
 }
