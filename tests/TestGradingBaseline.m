@@ -82,14 +82,18 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
             testCase.verifyFalse(result.checkpointSelection.testUsed);
         end
 
-        function normalModeWithDefaultOptionsNeverConstructsTestQueue(testCase)
+        % The EvaluateTest opt-in path is deliberately not exercised end to
+        % end by this automated suite: the held-out test split is touched
+        % once, by hand, after the operating point is frozen (see
+        % docs/SIH26038_design.html §10.4/§11.2). Only smoke/inspect modes
+        % run here, plus fast-failing option validation that never reaches
+        % data loading.
+        function smokeModeNeverEvaluatesTheTestSplit(testCase)
             resultsRoot = tempname;
             cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
-            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
-            config.training.max_epochs = 1;
 
-            output = evalc(['result = grade.train(config, ''Mode'', ''normal'', ' ...
-                '''ResultsRoot'', resultsRoot);']);
+            output = evalc(['result = grade.train(TestGradingBaseline.defaultConfig(), ' ...
+                '''Mode'', ''smoke'', ''ResultsRoot'', resultsRoot);']);
 
             testCase.verifyFalse(result.checkpointSelection.testUsed);
             testCase.verifyEmpty(result.testMetrics);
@@ -98,18 +102,14 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 fullfile(char(result.resultsDirectory), 'test_metrics.mat')));
         end
 
-        function normalModeWithEvaluateTestOptedInConstructsTestQueue(testCase)
-            resultsRoot = tempname;
-            cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
-            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
-            config.training.max_epochs = 1;
+        function evaluateTestIsRejectedOutsideNormalMode(testCase)
+            testCase.verifyError(@() grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'smoke', 'EvaluateTest', true), 'grade:InvalidEvaluateTest');
+        end
 
-            output = evalc(['result = grade.train(config, ''Mode'', ''normal'', ' ...
-                '''ResultsRoot'', resultsRoot, ''EvaluateTest'', true);']);
-
-            testCase.verifyTrue(result.checkpointSelection.testUsed);
-            testCase.verifyNotEmpty(result.testMetrics);
-            testCase.verifyNotEmpty(strfind(output, 'TEST epoch')); %#ok<STREMP>
+        function evaluateTestRejectsNonLogicalValues(testCase)
+            testCase.verifyError(@() grade.train(TestGradingBaseline.defaultConfig(), ...
+                'EvaluateTest', '0'), 'grade:InvalidEvaluateTest');
         end
     end
 

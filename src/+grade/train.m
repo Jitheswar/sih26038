@@ -148,6 +148,9 @@ if bestEpoch == 0
     error('grade:NoCheckpoint', 'No validation checkpoint was selected.');
 end
 
+checkpoint = load(bestCheckpoint, 'net');
+net = checkpoint.net;
+
 history.bestEpoch = bestEpoch;
 history.bestValidationMacroRecall = bestMacroRecall;
 history.bestValidationLoss = bestValidationLoss;
@@ -157,8 +160,6 @@ save(fullfile(resultsDirectory, 'training_history.mat'), ...
 testMetric = [];
 testEvaluated = strcmp(mode, "normal") && evaluateTest;
 if testEvaluated
-    checkpoint = load(bestCheckpoint, 'net');
-    net = checkpoint.net;
     testQueue = createMiniBatchQueue(stores.test, selectedData.test.grades, ...
         batchSize, environment);
     testMetric = evaluateNetwork(net, testQueue, classWeightValues, ...
@@ -235,7 +236,17 @@ if strlength(resultsRoot) == 0
     resultsRoot = string(fullfile(projectRoot, 'results'));
 end
 resultsRoot = char(resultsRoot);
-evaluateTest = logical(parser.Results.EvaluateTest);
+rawEvaluateTest = parser.Results.EvaluateTest;
+isValidEvaluateTest = (islogical(rawEvaluateTest) || isnumeric(rawEvaluateTest)) ...
+    && isscalar(rawEvaluateTest);
+if ~isValidEvaluateTest
+    error('grade:InvalidEvaluateTest', 'EvaluateTest must be a logical scalar.');
+end
+evaluateTest = logical(rawEvaluateTest);
+if evaluateTest && mode ~= "normal"
+    error('grade:InvalidEvaluateTest', ...
+        'EvaluateTest is only valid in normal mode.');
+end
 end
 
 function directory = localResultsDirectory(resultsRoot)
