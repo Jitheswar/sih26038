@@ -3,7 +3,6 @@ function outputImage = enhanceBorderline(inputImage, mask, config)
 %   Enhancement is deterministic and is intended for borderline captures
 %   only.  Pixels outside MASK remain exactly black/background pixels.
 
-rng(42, 'twister');
 if nargin < 3
     config = [];
 end

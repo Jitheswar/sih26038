@@ -3,7 +3,7 @@ function [qualityResult, processedImage] = assess(image, config)
 %   [QUALITYRESULT, PROCESSEDIMAGE] = quality.assess(IMAGE, CONFIG) is the
 %   only public quality-gate entry point used by downstream inference.
 
-rng(42, 'twister');
+% Seeding is the entry point's responsibility; this helper is deterministic.
 if nargin < 2
     config = [];
 end

@@ -8,17 +8,19 @@ function [processedImage, qualityMetadata, preprocessingMetadata] = ...
 %   An optional third argument records the caller as training or inference;
 %   it does not alter the pipeline.
 
-rng(42, 'twister');
+% Seeding is the entry point's responsibility; this helper is deterministic.
 if nargin < 2
     inputConfig = [];
 end
 config = localConfiguration(inputConfig);
 mode = localMode(varargin{:});
+originalInputClass = class(inputImage);
 inputImage = localToExpectedType(inputImage, config.outputType);
 
-% Assess the original capture once. The gate is deliberately asked not to
-% enhance here so that this function owns the enhancement decision and can
-% keep the disabled-enhancement path completely unchanged.
+% Assess the original capture once, regardless of config.qualityGate, so
+% qualityMetadata.class is always populated. The gate is deliberately asked
+% not to enhance here so that this function owns the enhancement decision
+% and can keep the disabled-enhancement path completely unchanged.
 gateConfig = config.quality;
 gateConfig.enhancementEnabled = false;
 [qualityMetadata, ~] = quality.assess(inputImage, gateConfig);
@@ -26,7 +28,7 @@ qualityMetadata.qualityGateApplied = config.qualityGate;
 
 pipelineImage = inputImage;
 enhancementApplied = false;
-if config.qualityGate && config.enhancement && ...
+if config.enhancement && ...
         strcmp(qualityMetadata.class, 'borderline')
     enhancementConfig = gateConfig;
     enhancementConfig.enhancementEnabled = true;
@@ -54,7 +56,7 @@ processedImage = localApplyChannelNormalization( ...
 processedImage = localCastOutput(processedImage, config.outputType);
 
 preprocessingMetadata = struct();
-preprocessingMetadata.inputClass = class(inputImage);
+preprocessingMetadata.inputClass = originalInputClass;
 preprocessingMetadata.inputSize = size(inputImage);
 preprocessingMetadata.outputClass = class(processedImage);
 preprocessingMetadata.outputSize = size(processedImage);
@@ -102,9 +104,10 @@ sizeValue = localFirst(inputConfig, {{'preprocessing', 'resolution'}, ...
     {'preprocessing', 'input_size'}, {'grading', 'input_size'}, {'input_size'}}, 448);
 config.outputSize = localResolution(sizeValue);
 
-fovValue = localFirst(inputConfig, {{'preprocessing', 'fov_mode'}, ...
-    {'fov_mode'}}, 'crop');
-if isfield(inputConfig, 'preprocessing') && ...
+fovModeSpecified = localFirst(inputConfig, ...
+    {{'preprocessing', 'fov_mode'}, {'fov_mode'}}, []);
+fovValue = fovModeSpecified;
+if isempty(fovModeSpecified) && isfield(inputConfig, 'preprocessing') && ...
         isstruct(inputConfig.preprocessing) && ...
         isfield(inputConfig.preprocessing, 'crop_fov')
     if ~islogical(inputConfig.preprocessing.crop_fov) && ...
@@ -119,12 +122,39 @@ if isfield(inputConfig, 'preprocessing') && ...
         fovValue = 'mask';
     end
 end
+if isempty(fovValue)
+    fovValue = 'crop';
+end
 config.fovMode = localFovMode(fovValue);
 
+config.quality = struct();
+if isfield(inputConfig, 'quality')
+    config.quality = inputConfig.quality;
+elseif isfield(inputConfig, 'qualityConfig')
+    config.quality = inputConfig.qualityConfig;
+end
+if ~isstruct(config.quality) || ~isscalar(config.quality)
+    error('common:InvalidConfig', 'The quality configuration must be a scalar structure.');
+end
+illuminationSigma = localFirst(inputConfig, ...
+    {{'preprocessing', 'illumination_sigma'}, {'illumination_sigma'}}, []);
+if ~isempty(illuminationSigma)
+    config.quality.illuminationSigma = localPositiveScalar( ...
+        illuminationSigma, 'illumination sigma');
+end
+
+claheDefault = true;
+if isfield(config.quality, 'claheEnabled') && ...
+        ((islogical(config.quality.claheEnabled) && ...
+        isscalar(config.quality.claheEnabled)) || ...
+        (isnumeric(config.quality.claheEnabled) && ...
+        isscalar(config.quality.claheEnabled)))
+    claheDefault = logical(config.quality.claheEnabled);
+end
 claheValue = localFirst(inputConfig, ...
-    {{'preprocessing', 'clahe'}, {'clahe'}}, true);
+    {{'preprocessing', 'clahe'}, {'clahe'}}, claheDefault);
 if isstruct(claheValue)
-    claheValue = localFirst(claheValue, {{'enabled'}}, true);
+    claheValue = localFirst(claheValue, {{'enabled'}}, claheDefault);
 end
 config.claheEnabled = localBooleanValue(claheValue, 'CLAHE enabled');
 
@@ -149,22 +179,6 @@ config.channelStd = localStatistics(config.channelStd, 'standard deviation');
 if any(config.channelStd <= 0)
     error('common:InvalidConfig', ...
         'Training channel standard deviations must be positive.');
-end
-
-config.quality = struct();
-if isfield(inputConfig, 'quality')
-    config.quality = inputConfig.quality;
-elseif isfield(inputConfig, 'qualityConfig')
-    config.quality = inputConfig.qualityConfig;
-end
-if ~isstruct(config.quality) || ~isscalar(config.quality)
-    error('common:InvalidConfig', 'The quality configuration must be a scalar structure.');
-end
-illuminationSigma = localFirst(inputConfig, ...
-    {{'preprocessing', 'illumination_sigma'}, {'illumination_sigma'}}, []);
-if ~isempty(illuminationSigma)
-    config.quality.illuminationSigma = localPositiveScalar( ...
-        illuminationSigma, 'illumination sigma');
 end
 end
 
@@ -260,10 +274,12 @@ else
     end
 end
 
-image = single(image);
+if ~isfloat(image)
+    image = single(image);
+end
 for channel = 1:numberOfChannels
-    image(:, :, channel) = (image(:, :, channel) - single(channelMean(channel))) ...
-        ./ single(channelStd(channel));
+    image(:, :, channel) = (image(:, :, channel) - cast(channelMean(channel), 'like', image)) ...
+        ./ cast(channelStd(channel), 'like', image);
 end
 end
 

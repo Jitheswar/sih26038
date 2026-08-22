@@ -32,13 +32,13 @@ end
 
 splitNames = {'train', 'validation', 'calibration', 'test'};
 splitProportions = [0.70, 0.15, 0.10, 0.05];
-gradeValues = 0:4;
+gradeValues = unique(grades)';
 assignment = strings(height(labels), 1);
 
 for grade = gradeValues
     gradeRows = find(grades == grade);
     gradeRows = gradeRows(randperm(numel(gradeRows)));
-    allocation = allocateCounts(numel(gradeRows), splitProportions);
+    allocation = allocateCounts(numel(gradeRows), splitProportions, grade);
 
     cursor = 1;
     for splitIndex = 1:numel(splitNames)
@@ -69,7 +69,7 @@ for splitIndex = 1:numel(splitNames)
 end
 end
 
-function allocation = allocateCounts(totalCount, proportions)
+function allocation = allocateCounts(totalCount, proportions, grade)
 rawCounts = totalCount .* proportions;
 allocation = floor(rawCounts);
 remaining = totalCount - sum(allocation);
@@ -78,7 +78,8 @@ allocation(order(1:remaining)) = allocation(order(1:remaining)) + 1;
 
 if any(allocation < 1)
     error('data:createSplits:UnrepresentedGrade', ...
-        'A grade cannot be represented in all four splits with the selected proportions.');
+        'Grade %d cannot be represented in all four splits with the selected proportions.', ...
+        grade);
 end
 end
 

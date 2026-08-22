@@ -4,7 +4,6 @@ function [qualityClass, diagnostics] = classifyQuality(features, config, fovInfo
 %   exists.  Severe focus, exposure, illumination, contrast, or FOV failures
 %   are ungradable.  Lesser failures are borderline and are enhanced once.
 
-rng(42, 'twister');
 if nargin < 2
     config = [];
 end

@@ -4,7 +4,6 @@ function [mask, info] = fovMask(inputImage, config)
 %   keeps the largest filled component, and returns diagnostics for the
 %   detected field.  The returned MASK is reused by every quality metric.
 
-rng(42, 'twister');
 if nargin < 2
     config = [];
 end

@@ -21,6 +21,7 @@ for splitIndex = 1:numel(splitNames)
         error('data:validateSplits:InvalidSchema', ...
             'Split %s does not contain the required columns.', splitName);
     end
+    splitTable = splitTable(:, requiredColumns);
     if numel(unique(string(splitTable.image_id))) ~= height(splitTable)
         error('data:validateSplits:DuplicateImage', ...
             'Split %s contains duplicate image IDs.', splitName);

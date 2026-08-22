@@ -4,7 +4,6 @@ function features = qualityFeatures(inputImage, mask, config)
 %   values are all derived from MASK.  Pixels outside MASK never enter a
 %   feature statistic.
 
-rng(42, 'twister');
 if nargin < 3
     config = [];
 end

@@ -4,7 +4,6 @@ function [advice, details] = recaptureAdvice(varargin)
 %   RECAPTUREADVICE(IMAGE, FEATURES, FOVINFO, CONFIG).  Advice is a cell
 %   array of messages so multiple independent capture problems are visible.
 
-rng(42, 'twister');
 [image, features, fovInfo, config] = localArguments(varargin{:});
 
 advice = {};
