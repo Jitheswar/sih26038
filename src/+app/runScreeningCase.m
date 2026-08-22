@@ -1,0 +1,475 @@
+function result = runScreeningCase(imageInput, checkpointPath, calibrationParameters, projectConfig)
+%RUNSCREENINGCASE Run one complete local DR screening case.
+%   RESULT = app.runScreeningCase(IMAGE, CHECKPOINT, CALIBRATION, CONFIG)
+%   is the testable orchestration seam for the demo application.  IMAGE is
+%   an image filename or a numeric/logical image array.  CALIBRATION is a
+%   positive temperature, a calibration structure, or a .mat/.json file
+%   containing a fitted temperature.
+%
+%   The quality gate runs before any model or evidence stage.  Classical
+%   candidate evidence remains explicitly provisional throughout the result.
+
+rng(42, 'twister');
+projectRoot = localProjectRoot();
+config = localReadProjectConfig(projectConfig, projectRoot);
+
+if ischar(imageInput) || (isstring(imageInput) && isscalar(imageInput))
+    localRejectSealedPath(char(imageInput), 'image');
+end
+[originalImage, imagePath] = localReadImage(imageInput);
+localRejectSealedPath(imagePath, 'image');
+
+% This is intentionally the first pipeline module call for every image.
+[qualityResult, qualityProcessedImage] = quality.assess(originalImage, config);
+qualityAdvice = qualityResult.recaptureAdvice;
+
+result = localBaseResult(originalImage, qualityProcessedImage, imagePath, ...
+    checkpointPath, calibrationParameters, config);
+result.qualityResult = qualityResult;
+result.qualityAdvice = qualityAdvice;
+
+if strcmpi(char(qualityResult.class), 'ungradable')
+    result.status = "stopped_quality_gate";
+    result.warnings = { ...
+        'The quality gate stopped inference because the image is ungradable.', ...
+        'No model, Grad-CAM, or candidate evidence was generated.'};
+    result.limitations = localLimitations();
+    result.threeWayDecision = grade.decisionPolicy( ...
+        struct('quality', qualityResult), localDecisionConfig(config));
+    result.agreementStatus = result.threeWayDecision.agreementStatus;
+    result.reportMetadata.status = 'quality gate stopped inference';
+    return;
+end
+
+checkpointPath = localRequirePath(checkpointPath, 'checkpoint', ...
+    'app:MissingCheckpoint');
+localRejectSealedPath(checkpointPath, 'checkpoint');
+[temperature, calibrationMetadata] = localResolveTemperature( ...
+    calibrationParameters);
+
+% common.preprocess is the only preprocessing function used by this seam.
+% The returned model image is passed into grade.infer through its explicit
+% preprocessed-input seam so the model path does not normalize it again.
+[modelImage, preprocessingQuality, preprocessingMetadata] = ...
+    common.preprocess(originalImage, config, 'inference');
+if isempty(qualityResult.fovMask) && isfield(preprocessingQuality, 'fovMask')
+    qualityResult = preprocessingQuality;
+    result.qualityResult = qualityResult;
+    result.qualityAdvice = qualityResult.recaptureAdvice;
+end
+
+inference = grade.infer(checkpointPath, modelImage, config, ...
+    'ReturnLogits', true, 'Preprocessed', true, ...
+    'QualityMetadata', qualityResult, ...
+    'PreprocessingMetadata', preprocessingMetadata);
+if isempty(inference.logits)
+    error('app:MissingLogits', ...
+        'The baseline model did not return logits for calibration.');
+end
+
+[calibratedClassProbabilities, scaledLogits] = ...
+    grade.applyTemperature(inference.logits, temperature);
+[~, calibratedPredictedIndex] = max(calibratedClassProbabilities, [], 1);
+predictedLevel = double(inference.predictedGrade(1));
+calibratedReferableProbability = sum( ...
+    calibratedClassProbabilities(3:5, 1));
+
+gradCAMResult = explain.gradcam(checkpointPath, originalImage, predictedLevel, ...
+    'ResultsRoot', fullfile(projectRoot, 'results'));
+
+candidateDetection = segment.detect(qualityProcessedImage, config);
+cnnEvidenceSummary = struct( ...
+    'predictedLevel', predictedLevel, ...
+    'calibratedReferableProbability', calibratedReferableProbability);
+lesionCandidateEvidence = explain.buildLesionEvidence( ...
+    qualityProcessedImage, candidateDetection, cnnEvidenceSummary);
+
+icdrEvidence = localICDREvidence(config, candidateDetection);
+icdrRuleResult = grade.icdrRule(icdrEvidence);
+
+explanationInput = struct( ...
+    'gradCamMetadata', struct( ...
+        'available', true, ...
+        'layer', gradCAMResult.convolutionalLayerName, ...
+        'rawResolution', gradCAMResult.rawHeatmapResolution), ...
+    'lesionEvidenceMetadata', struct( ...
+        'candidateEvidence', true, ...
+        'evidenceKnown', ~icdrRuleResult.uncertain, ...
+        'referable', icdrRuleResult.referable), ...
+    'gradCamAndLesionEvidenceSpatiallyAgree', ...
+        localSpatialAgreement(gradCAMResult, candidateDetection), ...
+    'lesionEvidenceSupportsCNN', ...
+        localEvidenceSupportsCNN(predictedLevel, candidateDetection, ...
+        icdrRuleResult));
+
+decisionInput = struct();
+decisionInput.quality = qualityResult;
+decisionInput.quality.metadata.postEnhancementQualityClass = ...
+    localPostEnhancementQuality(qualityResult);
+decisionInput.cnn = struct( ...
+    'predictedLevel', predictedLevel, ...
+    'calibratedReferableProbability', calibratedReferableProbability, ...
+    'classProbabilities', calibratedClassProbabilities(:, 1), ...
+    'uncertaintyScore', [], ...
+    'uncertaintyThreshold', []);
+decisionInput.ruleEngine = icdrRuleResult;
+decisionInput.explanation = explanationInput;
+threeWayDecision = grade.decisionPolicy(decisionInput, ...
+    localDecisionConfig(config));
+
+result.status = "completed";
+result.processedImage = qualityProcessedImage;
+result.modelInputImage = modelImage;
+result.preprocessingMetadata = preprocessingMetadata;
+result.predictedICDRLevel = predictedLevel;
+result.calibratedReferableProbability = calibratedReferableProbability;
+result.classProbabilities = inference.probabilities(:, 1);
+result.classProbabilitiesAreCalibrated = false;
+result.classProbabilitiesDescription = ...
+    'Raw softmax class probabilities; not calibrated confidence.';
+result.calibratedClassProbabilities = calibratedClassProbabilities(:, 1);
+result.calibratedClassProbabilitiesAreCalibrated = true;
+result.temperatureScaledLogits = scaledLogits(:, 1);
+result.calibration = calibrationMetadata;
+result.gradCAMResult = gradCAMResult;
+result.lesionCandidateEvidence = lesionCandidateEvidence;
+result.icdrRuleResult = icdrRuleResult;
+result.threeWayDecision = threeWayDecision;
+result.agreementStatus = threeWayDecision.agreementStatus;
+result.reportMetadata = localCompletedReportMetadata(result, config, imagePath);
+result.warnings = localWarnings(icdrRuleResult, threeWayDecision);
+result.limitations = localLimitations();
+end
+
+function result = localBaseResult(originalImage, processedImage, imagePath, ...
+        checkpointPath, calibrationParameters, config)
+imageIdentifier = localImageIdentifier(imagePath);
+result = struct();
+result.status = "initializing";
+result.originalImage = originalImage;
+result.processedImage = processedImage;
+result.modelInputImage = [];
+result.qualityResult = struct();
+result.qualityAdvice = {};
+result.predictedICDRLevel = [];
+result.calibratedReferableProbability = [];
+result.classProbabilities = [];
+result.classProbabilitiesAreCalibrated = false;
+result.classProbabilitiesDescription = ...
+    'Raw softmax class probabilities; not calibrated confidence.';
+result.calibratedClassProbabilities = [];
+result.calibratedClassProbabilitiesAreCalibrated = true;
+result.temperatureScaledLogits = [];
+result.calibration = struct('temperature', [], 'source', 'not resolved');
+result.gradCAMResult = struct();
+result.lesionCandidateEvidence = struct();
+result.icdrRuleResult = struct();
+result.threeWayDecision = struct();
+result.agreementStatus = 'not assessed';
+result.reportMetadata = struct( ...
+    'timestamp', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
+    'imageIdentifier', imageIdentifier, ...
+    'patientIdentifier', imageIdentifier, ...
+    'imagePath', imagePath, ...
+    'checkpointPath', char(checkpointPath), ...
+    'calibrationSource', localInputDescription(calibrationParameters), ...
+    'projectConfiguration', localInputDescription(config), ...
+    'sealedDataAccessed', false, ...
+    'status', 'not completed');
+result.preprocessingMetadata = struct();
+result.warnings = {};
+result.limitations = localLimitations();
+end
+
+function config = localReadProjectConfig(inputConfig, projectRoot)
+if nargin < 1 || isempty(inputConfig)
+    inputConfig = fullfile(projectRoot, 'config', 'default.json');
+end
+if ischar(inputConfig) || (isstring(inputConfig) && isscalar(inputConfig))
+    configPath = char(inputConfig);
+    localRejectSealedPath(configPath, 'project configuration');
+    if ~isfile(configPath)
+        configPath = fullfile(projectRoot, configPath);
+    end
+    if ~isfile(configPath)
+        error('app:MissingConfig', ...
+            'Project configuration does not exist: %s', char(inputConfig));
+    end
+    try
+        config = jsondecode(fileread(configPath));
+    catch exception
+        error('app:InvalidConfig', ...
+            'Project configuration could not be decoded: %s', exception.message);
+    end
+elseif isstruct(inputConfig) && isscalar(inputConfig)
+    config = inputConfig;
+else
+    error('app:InvalidConfig', ...
+        'Project configuration must be a JSON path or scalar structure.');
+end
+end
+
+function [image, imagePath] = localReadImage(inputImage)
+imagePath = '';
+if ischar(inputImage) || (isstring(inputImage) && isscalar(inputImage))
+    imagePath = char(inputImage);
+    if ~isfile(imagePath)
+        error('app:MissingImage', 'Image does not exist: %s', imagePath);
+    end
+    try
+        [image, map] = imread(imagePath);
+        if ~isempty(map)
+            image = ind2rgb(image, map);
+        end
+    catch exception
+        error('app:UnreadableImage', ...
+            'Image could not be read: %s', exception.message);
+    end
+else
+    image = inputImage;
+end
+if isempty(image) || ~(isnumeric(image) || islogical(image)) || ~isreal(image)
+    error('app:InvalidImage', ...
+        'The image must be a non-empty real numeric or logical array.');
+end
+end
+
+function checkpointPath = localRequirePath(inputPath, description, errorId)
+if ~(ischar(inputPath) || (isstring(inputPath) && isscalar(inputPath)))
+    error(errorId, 'The %s must be a file path.', description);
+end
+checkpointPath = char(inputPath);
+if ~isfile(checkpointPath)
+    error(errorId, 'The %s does not exist: %s', description, checkpointPath);
+end
+end
+
+function [temperature, metadata] = localResolveTemperature(input)
+metadata = struct('temperature', [], 'source', localInputDescription(input));
+if isnumeric(input) && isscalar(input) && isfinite(input) && input > 0
+    temperature = double(input);
+    metadata.temperature = temperature;
+    metadata.source = 'numeric calibration parameter';
+    return;
+end
+if isstruct(input) && isscalar(input)
+    temperature = localTemperatureField(input);
+    if isempty(temperature)
+        error('app:InvalidCalibration', ...
+            'Calibration structure does not contain a positive temperature.');
+    end
+    metadata.temperature = temperature;
+    metadata.source = 'calibration structure';
+    return;
+end
+if ~(ischar(input) || (isstring(input) && isscalar(input)))
+    error('app:MissingCalibration', ...
+        'Calibration parameters must be a temperature, structure, or file path.');
+end
+calibrationPath = char(input);
+localRejectSealedPath(calibrationPath, 'calibration parameters');
+if ~isfile(calibrationPath)
+    error('app:MissingCalibration', ...
+        'Calibration file does not exist: %s', calibrationPath);
+end
+[~, ~, extension] = fileparts(calibrationPath);
+try
+    if strcmpi(extension, '.json')
+        loaded = jsondecode(fileread(calibrationPath));
+    else
+        loaded = load(calibrationPath);
+    end
+catch exception
+    error('app:InvalidCalibration', ...
+        'Calibration file could not be loaded: %s', exception.message);
+end
+temperature = localTemperatureField(loaded);
+if isempty(temperature)
+    error('app:InvalidCalibration', ...
+        'Calibration file does not contain a positive temperature.');
+end
+metadata.temperature = temperature;
+metadata.source = calibrationPath;
+if isstruct(loaded) && isfield(loaded, 'temperatureFit')
+    metadata.fit = loaded.temperatureFit;
+elseif isstruct(loaded) && isfield(loaded, 'calibrationResult')
+    metadata.fit = loaded.calibrationResult;
+end
+end
+
+function temperature = localTemperatureField(value)
+temperature = [];
+if isnumeric(value) && isscalar(value) && isfinite(value) && value > 0
+    temperature = double(value);
+    return;
+end
+if ~isstruct(value) || ~isscalar(value)
+    return;
+end
+names = {'temperature', 'temperatureFit', 'calibrationResult'};
+for index = 1:numel(names)
+    if isfield(value, names{index})
+        temperature = localTemperatureField(value.(names{index}));
+        if ~isempty(temperature)
+            return;
+        end
+    end
+end
+end
+
+function evidence = localICDREvidence(config, detection)
+if isfield(config, 'app') && isstruct(config.app) && ...
+        isfield(config.app, 'icdrEvidence')
+    evidence = config.app.icdrEvidence;
+    if ~isstruct(evidence) || ~isscalar(evidence)
+        error('app:InvalidICDREvidence', ...
+            'app.icdrEvidence must be a scalar evidence structure.');
+    end
+    return;
+end
+candidateCount = double(detection.candidateCount);
+unknownCount = struct('value', [], 'known', false);
+unknownVector = struct('value', [], 'known', false);
+unknownLogical = struct('value', [], 'known', false);
+evidence = struct( ...
+    'microaneurysmCount', struct('value', candidateCount, 'known', true), ...
+    'haemorrhageCountPerQuadrant', unknownVector, ...
+    'hardExudateCount', unknownCount, ...
+    'softExudateCount', unknownCount, ...
+    'venousBeadingPerQuadrant', unknownLogical, ...
+    'irmaPerQuadrant', unknownLogical, ...
+    'neovascularisation', unknownLogical, ...
+    'vitreousOrPreretinalHaemorrhage', unknownLogical, ...
+    'evidenceSource', 'classical candidate evidence', ...
+    'clinicalValidationStatus', 'not clinically validated lesion segmentation');
+end
+
+function value = localPostEnhancementQuality(qualityResult)
+if strcmpi(char(qualityResult.class), 'borderline')
+    value = 'borderline';
+else
+    value = char(qualityResult.class);
+end
+end
+
+function answer = localSpatialAgreement(gradCAMResult, detection)
+answer = false;
+if ~isfield(gradCAMResult, 'resizedHeatmap') || ...
+        isempty(gradCAMResult.resizedHeatmap)
+    return;
+end
+if detection.candidateCount == 0
+    answer = true;
+    return;
+end
+heatmap = double(gradCAMResult.resizedHeatmap);
+coordinates = detection.candidateCoordinates;
+valid = coordinates(:, 1) >= 1 & coordinates(:, 1) <= size(heatmap, 2) & ...
+    coordinates(:, 2) >= 1 & coordinates(:, 2) <= size(heatmap, 1);
+coordinates = round(coordinates(valid, :));
+if isempty(coordinates)
+    return;
+end
+linear = sub2ind(size(heatmap), coordinates(:, 2), coordinates(:, 1));
+answer = mean(heatmap(linear) >= 0.35) >= 0.25;
+end
+
+function answer = localEvidenceSupportsCNN(predictedLevel, detection, rule)
+if predictedLevel >= 2
+    answer = detection.candidateCount > 0 || rule.referable;
+else
+    answer = detection.candidateCount == 0 && ~rule.referable;
+end
+end
+
+function config = localDecisionConfig(projectConfig)
+config = projectConfig;
+if ~isfield(config, 'decision_policy') || ~isstruct(config.decision_policy)
+    config.decision_policy = struct( ...
+        'referableThreshold', 0.70, ...
+        'autoClearThreshold', 0.20, ...
+        'uncertaintyThreshold', 0.50, ...
+        'requireEvidenceForAutoClear', true, ...
+        'alwaysEscalateLevel4', true, ...
+        'escalateOnUnknownEvidence', true, ...
+        'escalateOnExplanationDisagreement', true);
+end
+end
+
+function result = localCompletedReportMetadata(result, config, imagePath)
+result = struct( ...
+    'timestamp', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
+    'imageIdentifier', localImageIdentifier(imagePath), ...
+    'patientIdentifier', localImageIdentifier(imagePath), ...
+    'imagePath', imagePath, ...
+    'checkpointPath', char(result.reportMetadata.checkpointPath), ...
+    'calibrationSource', char(result.calibration.source), ...
+    'temperature', result.calibration.temperature, ...
+    'projectConfiguration', localInputDescription(config), ...
+    'sealedDataAccessed', false, ...
+    'status', 'completed', ...
+    'footer', 'Screening aid. Not a diagnosis. Requires clinician confirmation.');
+end
+
+function warnings = localWarnings(rule, decision)
+warnings = { ...
+    'Classical candidate evidence is provisional and not clinically validated lesion segmentation.', ...
+    'Raw softmax class probabilities are displayed only as raw model output, never as calibrated confidence.', ...
+    'Grad-CAM is regional model attention, not precise lesion localisation.', ...
+    'This screening aid is a research prototype and requires clinician confirmation.'};
+if rule.uncertain
+    warnings{end + 1} = rule.uncertaintyWarning;
+end
+if strcmp(decision.decision, 'escalate')
+    warnings{end + 1} = decision.decisionReason;
+end
+end
+
+function limitations = localLimitations()
+limitations = { ...
+    'No learned lesion segmentation is used.', ...
+    'No MC dropout or final clinical validation is implemented.', ...
+    'Classical candidate evidence is provisional and not clinically validated lesion segmentation.', ...
+    'This prototype has no CDSCO clearance and must not be used for clinical decision-making.', ...
+    'Messidor-2 and data/sealed/ are not read, loaded, evaluated, or modified.'};
+end
+
+function identifier = localImageIdentifier(imagePath)
+if isempty(imagePath)
+    identifier = 'array-input';
+else
+    [~, name, extension] = fileparts(imagePath);
+    identifier = [name, extension];
+end
+end
+
+function text = localInputDescription(value)
+if ischar(value)
+    text = value;
+elseif isstring(value) && isscalar(value)
+    text = char(value);
+elseif isstruct(value)
+    text = 'scalar configuration or calibration structure';
+elseif isempty(value)
+    text = 'not supplied';
+else
+    text = class(value);
+end
+end
+
+function localRejectSealedPath(path, description)
+if isempty(path)
+    return;
+end
+normalizedPath = lower(strrep(char(path), '\\', '/'));
+if contains(normalizedPath, '/data/sealed/') || ...
+        endsWith(normalizedPath, '/data/sealed')
+    error('app:SealedData', ...
+        'The %s is inside data/sealed and cannot be used.', description);
+end
+end
+
+function root = localProjectRoot()
+thisFile = mfilename('fullpath');
+root = fileparts(fileparts(fileparts(thisFile)));
+end

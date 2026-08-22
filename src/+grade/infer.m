@@ -40,8 +40,13 @@ end
 parser = inputParser;
 parser.addParameter('ReturnLogits', false, @(value) islogical(value) || ...
     (isnumeric(value) && isscalar(value)));
+parser.addParameter('Preprocessed', false, @(value) islogical(value) || ...
+    (isnumeric(value) && isscalar(value)));
+parser.addParameter('QualityMetadata', struct());
+parser.addParameter('PreprocessingMetadata', struct());
 parser.parse(optionArguments{:});
 returnLogits = logical(parser.Results.ReturnLogits);
+preprocessedInput = logical(parser.Results.Preprocessed);
 
 if isstruct(checkpointInput)
     checkpoint = checkpointInput;
@@ -58,8 +63,14 @@ end
 [config, ~, projectRoot] = readConfiguration(configInput);
 addpath(fullfile(projectRoot, 'eval'));
 addpath(fullfile(projectRoot, 'eval', 'metrics'));
-[processedImage, qualityMetadata, preprocessingMetadata] = ...
-    localPrepareImages(image, config);
+if preprocessedInput
+    [processedImage, qualityMetadata, preprocessingMetadata] = ...
+        localUsePreprocessedImage(image, parser.Results.QualityMetadata, ...
+        parser.Results.PreprocessingMetadata);
+else
+    [processedImage, qualityMetadata, preprocessingMetadata] = ...
+        localPrepareImages(image, config);
+end
 
 net = checkpoint.net;
 executionEnvironment = "cpu";
@@ -97,6 +108,30 @@ result.qualityMetadata = qualityMetadata;
 result.preprocessingMetadata = preprocessingMetadata;
 result.preprocessedImage = processedImage;
 result.gpuUsed = executionEnvironment == "gpu";
+end
+
+function [processedImage, qualityMetadata, preprocessingMetadata] = ...
+        localUsePreprocessedImage(image, qualityMetadata, preprocessingMetadata)
+if iscell(image) || ~(isnumeric(image) || islogical(image)) || isempty(image)
+    error('grade:InvalidPreprocessedImage', ...
+        'A non-empty numeric preprocessed image is required.');
+end
+if ndims(image) > 4
+    error('grade:InvalidPreprocessedImage', ...
+        'A preprocessed image must have at most four dimensions.');
+end
+processedImage = image;
+if ndims(processedImage) == 2
+    processedImage = repmat(processedImage, 1, 1, 3);
+elseif ndims(processedImage) == 3 && size(processedImage, 3) == 1
+    processedImage = repmat(processedImage, 1, 1, 3);
+end
+if isempty(qualityMetadata)
+    qualityMetadata = struct('status', 'provided_by_orchestrator');
+end
+if isempty(preprocessingMetadata)
+    preprocessingMetadata = struct('status', 'provided_by_orchestrator');
+end
 end
 
 function result = localPreprocessOnly(image, configInput)
