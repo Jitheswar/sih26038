@@ -138,6 +138,9 @@ hr{border:none; border-top:.5px solid var(--rule); margin:5mm 0}
 <tr><td>Owner</td><td>Team lead</td></tr>
 <tr><td>Revision trigger</td><td>Any change to the validation protocol, the frozen operating point, or the dataset split</td></tr>
 <tr><td>Frozen sections</td><td>§10.4 (sealed test set) and §11.2 (operating point) must not be edited after the freeze date without recording the change and the reason in this table</td></tr>
+<tr><td>Change, 23 Aug 2026, §11.2 step 1</td><td><strong>Sweep on calibrated, not raw, probabilities.</strong> The protocol did not say which. <code>app.runScreeningCase</code> computes <code>calibratedReferableProbability</code> from temperature-scaled logits and passes that to <code>grade.decisionPolicy</code>, so a threshold swept on raw softmax would be applied at inference to a differently-scaled quantity. Recorded before the freeze date, not after.</td></tr>
+<tr><td>Change, 23 Aug 2026, §11.2 / §9 decision policy</td><td><strong><code>decision_policy.autoClearThreshold</code> raised 0.20 → 0.40 so the deployed policy realises the frozen operating point.</strong> §11.2 defines a binary endpoint, but <code>grade.decisionPolicy</code> is three-way and branches on the argmax before consulting any threshold. Measured on validation, the old 0.20 setting gave screening sensitivity 0.9910 (221/223) with specificity 0.8563, 95% CI lower bound <strong>0.8141</strong> — failing the §11.2 specificity target on the interval. At 0.40 the deployed policy reproduces the frozen point exactly: sensitivity 0.9821, specificity 0.9174, both intervals clear. Side effect: human review load falls from 48.7% to 44.7% of cases, which <strong>changes the C5 SimEvents deferral assumption and means the §9 sweeps should be re-run</strong> before their numbers are quoted alongside this operating point. Recorded before the freeze date, not after.</td></tr>
+<tr><td>Change, 23 Aug 2026, §11.2 step 2</td><td><strong>Select on the confidence-interval lower bound, not the point estimate.</strong> The original rule — sensitivity ≥ 0.90, then maximise specificity — is satisfied at the boundary, so it selects the operating point where sensitivity only just reaches target and the interval straddles it. Measured on this model it returns threshold 0.620: sensitivity 0.9148 with 95% CI lower bound <strong>0.8708</strong>, which fails the §11.2 target that §11.1 requires be reported as an interval. The rule as written could therefore certify an operating point that its own reporting policy rejects. The amended rule returns 0.400, sensitivity 0.9821 with CI lower bound 0.9548. Specificity is the slack side of this trade: its target is 0.85 and the frozen point delivers 0.9174, so buying sensitivity margin with specificity is the correct direction for a screening tool per §3, where a false negative is catastrophic and a false positive is recoverable. Recorded before the freeze date, not after.</td></tr>
 </tbody>
 </table>
 
@@ -1097,18 +1100,19 @@ AGREEMENT      Rule path and CNN agree
 
 <h4>Threshold selection protocol</h4>
 <ol>
-<li>On the <strong>validation</strong> split, sweep the decision threshold across its range.</li>
-<li>Select the threshold that achieves sensitivity ≥ 0.90, and among those, maximises specificity.</li>
+<li>On the <strong>validation</strong> split, sweep the decision threshold across its range, on <strong>temperature-calibrated</strong> P(grade &gt; 1) — the deployed path in <code>app.runScreeningCase</code> thresholds the calibrated probability, so sweeping raw softmax would freeze a value that means something different at inference time.</li>
+<li>Select the threshold that achieves sensitivity ≥ 0.90, and among those, maximises specificity. <strong>Amended 23 Aug 2026 — see §0.3:</strong> select the threshold whose 95% Wilson <em>lower bound</em> clears 0.90 sensitivity and 0.85 specificity, and among those maximise sensitivity, breaking ties on specificity.</li>
 <li><strong>Freeze it. Record the value and the date in the table below.</strong></li>
 <li>Apply the frozen threshold unchanged to the internal test split and to the sealed external set.</li>
 </ol>
 
 <table class="kv">
 <tbody>
-<tr><td>Frozen threshold value</td><td><em>to be recorded on freeze</em></td></tr>
-<tr><td>Freeze date</td><td><em>to be recorded on freeze</em></td></tr>
-<tr><td>Validation sensitivity / specificity at freeze</td><td><em>to be recorded on freeze</em></td></tr>
-<tr><td>Frozen by</td><td><em>name</em></td></tr>
+<tr><td>Frozen threshold value</td><td><strong>0.400</strong> on temperature-calibrated P(ICDR ≥ 2), temperature 2.1414.<br>Applied as <code>decision_policy.autoClearThreshold</code>. That gate is the only path in <code>grade.decisionPolicy</code> that sends a patient home, so it alone determines screening sensitivity; <code>referableThreshold</code> (0.70) only splits <em>refer</em> from <em>escalate</em> and leaves sensitivity unchanged. <span class="tag">Verified</span></td></tr>
+<tr><td>Freeze date</td><td><strong>23 August 2026</strong></td></tr>
+<tr><td>Validation sensitivity / specificity at freeze</td><td>Sensitivity <strong>0.9821</strong> (95% Wilson CI 0.9548–0.9931, 219/223)<br>Specificity <strong>0.9174</strong> (95% Wilson CI 0.8825–0.9424, 300/327)<br>n = 550. Both intervals clear their targets. <span class="tag">Verified</span></td></tr>
+<tr><td>Model frozen</td><td><code>results/20260823_184930/epoch_08.mat</code> (run 2, epoch 8 of 8, early-stopped)<br>Calibration: <code>results/20260823_204608/</code>, ECE 0.1110 → 0.0432</td></tr>
+<tr><td>Frozen by</td><td>Jitheswar</td></tr>
 </tbody>
 </table>
 
