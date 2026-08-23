@@ -85,7 +85,7 @@ fprintf('Dataset: APTOS | input: %dx%dx3 | batch size: %d | epochs: %d\n', ...
 
 trainQueue = createMiniBatchQueue(stores.train, selectedData.train.grades, ...
     batchSize, environment, config.training.dispatch_in_background, ...
-    config.training.augmentation, config.grading.seed);
+    config.training.augmentation, config.grading.seed, config.augmentation);
 validationQueue = createMiniBatchQueue(stores.validation, ...
     selectedData.validation.grades, batchSize, environment, ...
     config.training.dispatch_in_background, false, config.grading.seed);
@@ -99,6 +99,10 @@ history.epochsCompleted = 0;
 history.batchSize = batchSize;
 history.inputSize = config.modelConfig.inputSize;
 history.classWeights = classWeightValues;
+history.dropout = config.grading.dropout;
+history.weightDecay = config.training.weight_decay;
+history.earlyStoppingPatience = config.training.early_stopping_patience;
+history.epochCheckpoints = strings(0, 1);
 
 averageGrad = [];
 averageSqGrad = [];
@@ -108,8 +112,18 @@ bestValidationLoss = Inf;
 bestEpoch = 0;
 bestCheckpoint = fullfile(resultsDirectory, 'best_model.mat');
 
+% Early stopping tracks validation loss separately from checkpoint
+% selection, which tracks macro recall. They are different questions:
+% "has this stopped improving" and "which epoch do we keep".
+lowestValidationLoss = Inf;
+epochsWithoutImprovement = 0;
+stoppedEarly = false;
+
 warmupEpochs = config.training.warmup_epochs;
 gradientThreshold = config.training.gradient_threshold;
+weightDecay = config.training.weight_decay;
+patience = config.training.early_stopping_patience;
+saveEveryEpoch = config.training.save_every_epoch && ~strcmp(mode, "smoke");
 
 for epoch = 1:maxEpochs
     inWarmup = epoch <= warmupEpochs && ~strcmp(mode, "smoke");
@@ -152,6 +166,10 @@ for epoch = 1:maxEpochs
             config.training.gradient_decay_factor, ...
             config.training.squared_gradient_decay_factor, ...
             config.training.epsilon);
+        if weightDecay > 0
+            net = localApplyWeightDecay(net, weightDecay, ...
+                epochLearningRate, freezeBackbone);
+        end
         batchSamples = size(images, 4);
         epochLoss = epochLoss + double(gather(extractdata(loss))) * batchSamples;
         epochSamples = epochSamples + batchSamples;
@@ -166,6 +184,21 @@ for epoch = 1:maxEpochs
     history.validation(epoch) = localMetricForHistory(validationMetric);
     history.epochsCompleted = epoch;
 
+    % Every epoch is written before selection runs. The selector optimises
+    % five-class macro recall while the reported endpoint is binary
+    % referable sensitivity, and in results/20260823_162453 they disagreed:
+    % epoch 8 was the best model for the endpoint and was discarded because
+    % epoch 7 scored higher on macro recall. Keeping every epoch, with its
+    % unstripped metric so the validation probabilities survive, means no
+    % operating-point decision is ever foreclosed by the selector.
+    if saveEveryEpoch
+        epochCheckpoint = fullfile(resultsDirectory, ...
+            sprintf('epoch_%02d.mat', epoch));
+        validation = validationMetric; %#ok<NASGU>
+        save(epochCheckpoint, 'net', 'config', 'validation', 'epoch');
+        history.epochCheckpoints(epoch, 1) = string(epochCheckpoint);
+    end
+
     macroRecall = mean(validationMetric.perClassRecall);
     isBetter = macroRecall > bestMacroRecall || ...
         (macroRecall == bestMacroRecall && ...
@@ -178,6 +211,22 @@ for epoch = 1:maxEpochs
         save(bestCheckpoint, 'net', 'config', 'validation', 'epoch');
         fprintf('Selected validation checkpoint at epoch %d.\n', epoch);
     end
+
+    if validationMetric.loss < lowestValidationLoss
+        lowestValidationLoss = validationMetric.loss;
+        epochsWithoutImprovement = 0;
+    else
+        epochsWithoutImprovement = epochsWithoutImprovement + 1;
+        fprintf(['Validation loss has not improved for %d epoch(s) ' ...
+            '(best %.6f).\n'], epochsWithoutImprovement, lowestValidationLoss);
+    end
+    if patience > 0 && epochsWithoutImprovement >= patience
+        stoppedEarly = true;
+        fprintf(['EARLY STOP: validation loss did not improve for %d ' ...
+            'consecutive epochs; stopping at epoch %d of %d.\n'], ...
+            patience, epoch, maxEpochs);
+        break;
+    end
 end
 
 if bestEpoch == 0
@@ -187,9 +236,19 @@ end
 checkpoint = load(bestCheckpoint, 'net');
 net = checkpoint.net;
 
+% Early stopping leaves the preallocated per-epoch vectors padded with
+% zeros past the last epoch that actually ran. Trim them so a reader cannot
+% mistake padding for a measured epoch of zero loss.
+history.trainingLoss = history.trainingLoss(1:history.epochsCompleted);
+history.learningRate = history.learningRate(1:history.epochsCompleted);
+history.backboneFrozen = history.backboneFrozen(1:history.epochsCompleted);
+
 history.bestEpoch = bestEpoch;
 history.bestValidationMacroRecall = bestMacroRecall;
 history.bestValidationLoss = bestValidationLoss;
+history.stoppedEarly = stoppedEarly;
+history.lowestValidationLoss = lowestValidationLoss;
+history.maxEpochsConfigured = maxEpochs;
 save(fullfile(resultsDirectory, 'training_history.mat'), ...
     'history', 'config', '-v7.3');
 
@@ -215,6 +274,35 @@ result.testMetrics = testMetric;
 result.gpuUsed = environment == "gpu";
 result.checkpointSelection.testUsed = testEvaluated;
 result.checkpointSelection.bestEpoch = bestEpoch;
+result.stoppedEarly = stoppedEarly;
+result.epochCheckpoints = history.epochCheckpoints;
+end
+
+function net = localApplyWeightDecay(net, weightDecay, learningRate, freezeBackbone)
+%LOCALAPPLYWEIGHTDECAY Decoupled (AdamW-style) decay on weight tensors.
+%   Applied after adamupdate rather than folded into the gradient, so the
+%   decay is not rescaled by Adam's per-parameter second-moment estimate.
+%
+%   Two exclusions matter. Biases and batch normalization Scale/Offset are
+%   left alone: shrinking them does not reduce model capacity and pulling a
+%   normalization scale toward zero suppresses the channel outright.
+%   Frozen layers are also left alone - during warmup only fc1000 receives
+%   gradients, and decaying the backbone there would shrink pretrained
+%   ImageNet features that have no gradient to push back, degrading the
+%   representation before fine-tuning ever starts.
+
+learnables = net.Learnables;
+factor = 1 - learningRate * weightDecay;
+for index = 1:height(learnables)
+    if learnables.Parameter(index) ~= "Weights"
+        continue;
+    end
+    if freezeBackbone && string(learnables.Layer(index)) ~= "fc1000"
+        continue;
+    end
+    learnables.Value{index} = learnables.Value{index} * factor;
+end
+net.Learnables = learnables;
 end
 
 function data = localOversampleMinorities(data, enabled)

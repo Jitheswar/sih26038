@@ -72,6 +72,17 @@ end
 if config.grading.seed ~= 42
     error('grade:InvalidSeed', 'The baseline entry point requires rng(42).');
 end
+% Dropout in front of the classification head. ResNet-50 ships without any,
+% and 2564 unique training images against 25M parameters overfits by the
+% fifth epoch (results/20260823_162453). Zero disables the layer entirely,
+% which keeps the pre-dropout architecture reachable from config alone.
+config.grading = localDefault(config.grading, 'dropout', 0.5);
+dropout = double(config.grading.dropout);
+if ~isscalar(dropout) || ~isfinite(dropout) || dropout < 0 || dropout >= 1
+    error('grade:InvalidDropout', ...
+        'grading.dropout must be a scalar in [0, 1).');
+end
+config.grading.dropout = dropout;
 
 if ~isfield(config, 'training') || ~isstruct(config.training)
     config.training = struct();
@@ -141,6 +152,45 @@ if ~(islogical(config.training.augmentation) && ...
         'training.augmentation must be a logical scalar.');
 end
 
+% Decoupled (AdamW-style) weight decay, applied after adamupdate to weight
+% tensors only, and only where gradients flow. Applying it to a frozen
+% backbone would shrink pretrained features that receive no gradient to
+% balance them, so localApplyWeightDecay skips frozen layers during warmup.
+config.training = localDefault(config.training, 'weight_decay', 0.1);
+weightDecay = double(config.training.weight_decay);
+if ~isscalar(weightDecay) || ~isfinite(weightDecay) || weightDecay < 0
+    error('grade:InvalidWeightDecay', ...
+        'training.weight_decay must be a non-negative scalar (0 disables decay).');
+end
+config.training.weight_decay = weightDecay;
+
+% Stop once validation loss has failed to improve for this many consecutive
+% epochs. Validation loss is the early-stopping signal rather than macro
+% recall because it is the metric that penalises overconfidence, and the
+% previous run kept its accuracy while its probabilities degraded.
+% Zero disables early stopping and runs the full epoch budget.
+config.training = localDefault(config.training, 'early_stopping_patience', 4);
+patience = double(config.training.early_stopping_patience);
+if ~isscalar(patience) || ~isfinite(patience) || patience < 0 || ...
+        patience ~= floor(patience)
+    error('grade:InvalidEarlyStoppingPatience', ...
+        'training.early_stopping_patience must be a non-negative integer.');
+end
+config.training.early_stopping_patience = patience;
+
+% Write a checkpoint for every epoch, not just the selected one. The
+% selector optimises five-class macro recall while the primary endpoint is
+% binary referable sensitivity; in results/20260823_162453 those disagreed
+% and the best endpoint epoch was discarded unrecoverably.
+config.training = localDefault(config.training, 'save_every_epoch', true);
+if ~(islogical(config.training.save_every_epoch) && ...
+        isscalar(config.training.save_every_epoch))
+    error('grade:InvalidSaveEveryEpoch', ...
+        'training.save_every_epoch must be a logical scalar.');
+end
+
+config = localAugmentationConfiguration(config);
+
 if ~isfield(config, 'class_balancing') || ~isstruct(config.class_balancing)
     config.class_balancing = struct();
 end
@@ -182,4 +232,59 @@ function inputStruct = localDefault(inputStruct, fieldName, value)
 if ~isfield(inputStruct, fieldName)
     inputStruct.(fieldName) = value;
 end
+end
+
+function config = localAugmentationConfiguration(config)
+%LOCALAUGMENTATIONCONFIGURATION Validate the train-only augmentation block.
+%   training.augmentation is the on/off switch; this block says how. The
+%   design doc forbids augmentations that destroy microaneurysm evidence,
+%   so there is deliberately no blur, no noise and no elastic warp here -
+%   only rigid transforms and modest photometric jitter.
+
+if ~isfield(config, 'augmentation') || ~isstruct(config.augmentation)
+    config.augmentation = struct();
+end
+augmentation = config.augmentation;
+
+augmentation = localDefault(augmentation, 'rotation', true);
+if ~(islogical(augmentation.rotation) && isscalar(augmentation.rotation))
+    error('grade:InvalidAugmentation', ...
+        'augmentation.rotation must be a logical scalar.');
+end
+augmentation = localDefault(augmentation, 'flips', true);
+if ~(islogical(augmentation.flips) && isscalar(augmentation.flips))
+    error('grade:InvalidAugmentation', ...
+        'augmentation.flips must be a logical scalar.');
+end
+
+augmentation = localDefault(augmentation, 'scale_jitter', [0.85, 1.0]);
+scaleJitter = double(augmentation.scale_jitter(:)).';
+if numel(scaleJitter) ~= 2 || any(~isfinite(scaleJitter)) || ...
+        scaleJitter(1) <= 0 || scaleJitter(1) > scaleJitter(2) || ...
+        scaleJitter(2) > 1
+    error('grade:InvalidAugmentation', ...
+        ['augmentation.scale_jitter must be [low high] with ' ...
+        '0 < low <= high <= 1; values above 1 would need padding, ' ...
+        'which invents evidence outside the field of view.']);
+end
+augmentation.scale_jitter = scaleJitter;
+
+augmentation = localDefault(augmentation, 'brightness_shift', 10);
+brightnessShift = double(augmentation.brightness_shift);
+if ~isscalar(brightnessShift) || ~isfinite(brightnessShift) || brightnessShift < 0
+    error('grade:InvalidAugmentation', ...
+        'augmentation.brightness_shift must be a non-negative scalar.');
+end
+augmentation.brightness_shift = brightnessShift;
+
+augmentation = localDefault(augmentation, 'contrast_gain', [0.9, 1.1]);
+contrastGain = double(augmentation.contrast_gain(:)).';
+if numel(contrastGain) ~= 2 || any(~isfinite(contrastGain)) || ...
+        contrastGain(1) <= 0 || contrastGain(1) > contrastGain(2)
+    error('grade:InvalidAugmentation', ...
+        'augmentation.contrast_gain must be [low high] with 0 < low <= high.');
+end
+augmentation.contrast_gain = contrastGain;
+
+config.augmentation = augmentation;
 end

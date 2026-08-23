@@ -17,16 +17,20 @@
     "head": "softmax",
     "num_classes": 5,
     "batch_size": 16,
-    "seed": 42
+    "seed": 42,
+    "dropout": 0.5
   },
   "training": {
-    "max_epochs": 10,
+    "max_epochs": 15,
     "learning_rate": 0.00002,
     "warmup_epochs": 2,
     "warmup_learning_rate": 0.001,
     "gradient_threshold": 10,
     "dispatch_in_background": false,
     "augmentation": true,
+    "weight_decay": 0.1,
+    "early_stopping_patience": 4,
+    "save_every_epoch": true,
     "gradient_decay_factor": 0.9,
     "squared_gradient_decay_factor": 0.999,
     "epsilon": 0.00000001,
@@ -34,6 +38,13 @@
     "smoke_examples_per_class": 2,
     "smoke_batch_size": 2,
     "smoke_freeze_backbone": true
+  },
+  "augmentation": {
+    "rotation": true,
+    "flips": true,
+    "scale_jitter": [0.85, 1.0],
+    "brightness_shift": 10,
+    "contrast_gain": [0.9, 1.1]
   },
   "class_balancing": {
     "method": "inverse_frequency",

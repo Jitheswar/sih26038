@@ -16,7 +16,53 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 'Mode', 'inspect');
 
             testCase.verifyEqual(result.modelConfig.numClasses, 5);
-            testCase.verifyEqual(result.network.Layers(end - 1).OutputSize, 5);
+            % Look the head up by name rather than by position. addLayers
+            % appends the dropout layer to the end of the Layers array
+            % regardless of where it sits in the graph, so Layers(end-1)
+            % is not the classification head once dropout is enabled.
+            layers = result.network.Layers;
+            headIndex = find(arrayfun(@(l) strcmp(l.Name, 'fc1000'), layers));
+            testCase.verifyNumElements(headIndex, 1);
+            testCase.verifyEqual(layers(headIndex).OutputSize, 5);
+        end
+
+        function dropoutSitsInFrontOfTheClassificationHead(testCase)
+            % The head must stay regularised and fc1000 must stay the last
+            % learnable layer, because freezeBackboneGradients keys warmup
+            % on that name.
+            result = grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'inspect');
+            net = result.network;
+
+            testCase.verifyGreaterThan(result.config.grading.dropout, 0);
+            isDropout = arrayfun(@(l) isa(l, 'nnet.cnn.layer.DropoutLayer'), ...
+                net.Layers);
+            testCase.verifyTrue(any(isDropout), ...
+                'A dropout layer must guard the classification head.');
+
+            % avg_pool -> head_dropout -> fc1000, verified through the
+            % connection table rather than layer order.
+            connections = net.Connections;
+            testCase.verifyTrue(any(strcmp(connections.Source, 'avg_pool') & ...
+                strcmp(connections.Destination, 'head_dropout')));
+            testCase.verifyTrue(any(strcmp(connections.Source, 'head_dropout') & ...
+                strcmp(connections.Destination, 'fc1000')));
+            testCase.verifyFalse(any(strcmp(connections.Source, 'avg_pool') & ...
+                strcmp(connections.Destination, 'fc1000')), ...
+                'avg_pool must no longer feed fc1000 directly.');
+        end
+
+        function dropoutCanBeDisabledFromConfiguration(testCase)
+            % §11.6: a pipeline stage turns off from config, never by
+            % editing code, so the pre-dropout architecture must stay
+            % reachable without touching buildNetwork.
+            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            config.grading.dropout = 0;
+            result = grade.train(config, 'Mode', 'inspect');
+
+            isDropout = arrayfun(@(l) isa(l, 'nnet.cnn.layer.DropoutLayer'), ...
+                result.network.Layers);
+            testCase.verifyFalse(any(isDropout));
         end
 
         function configuredInputSizeIsRespected(testCase)
@@ -132,6 +178,87 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
         % docs/SIH26038_design.html §10.4/§11.2). Only smoke/inspect modes
         % run here, plus fast-failing option validation that never reaches
         % data loading.
+        function weightDecayLeavesFrozenBackboneWeightsAlone(testCase)
+            % Decoupled weight decay shrinks a weight every step whether or
+            % not it received a gradient. Applied to a frozen backbone that
+            % is exactly wrong: pretrained ImageNet features would decay
+            % toward zero with nothing pushing back, degrading the
+            % representation before fine-tuning starts. Smoke mode freezes
+            % everything except fc1000, so every backbone weight must come
+            % out bit-identical while the head is free to move.
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
+
+            config = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            testCase.assertGreaterThan(config.training.weight_decay, 0, ...
+                'This test is only meaningful with decay enabled.');
+
+            pristine = grade.train(config, 'Mode', 'inspect');
+            trained = grade.train(config, 'Mode', 'smoke', ...
+                'ResultsRoot', resultsRoot);
+
+            before = pristine.network.Learnables;
+            after = trained.network.Learnables;
+            testCase.assertEqual(height(after), height(before));
+
+            headMoved = false;
+            for index = 1:height(before)
+                isWeight = before.Parameter(index) == "Weights";
+                isHead = string(before.Layer(index)) == "fc1000";
+                beforeValue = gather(extractdata(before.Value{index}));
+                afterValue = gather(extractdata(after.Value{index}));
+                if isWeight && ~isHead
+                    testCase.verifyEqual(afterValue, beforeValue, ...
+                        sprintf(['Frozen backbone weight "%s" changed; ' ...
+                        'weight decay must skip frozen layers.'], ...
+                        string(before.Layer(index))));
+                elseif isWeight && isHead && ~isequal(afterValue, beforeValue)
+                    headMoved = true;
+                end
+            end
+
+            testCase.verifyTrue(headMoved, ...
+                'The unfrozen head must still train.');
+        end
+
+        function newTrainingControlsAreValidated(testCase)
+            % §11.6: these are config knobs, so bad values must fail loudly
+            % rather than silently falling back to a default.
+            base = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+
+            negativeDecay = base; negativeDecay.training.weight_decay = -1;
+            testCase.verifyError(@() grade.train(negativeDecay, 'Mode', 'inspect'), ...
+                'grade:InvalidWeightDecay');
+
+            fractionalPatience = base;
+            fractionalPatience.training.early_stopping_patience = 1.5;
+            testCase.verifyError(@() grade.train(fractionalPatience, 'Mode', 'inspect'), ...
+                'grade:InvalidEarlyStoppingPatience');
+
+            badDropout = base; badDropout.grading.dropout = 1;
+            testCase.verifyError(@() grade.train(badDropout, 'Mode', 'inspect'), ...
+                'grade:InvalidDropout');
+
+            paddingScale = base;
+            paddingScale.augmentation.scale_jitter = [0.9, 1.4];
+            testCase.verifyError(@() grade.train(paddingScale, 'Mode', 'inspect'), ...
+                'grade:InvalidAugmentation');
+
+            % And the defaults that make the run reproducible must survive
+            % a round trip through readConfiguration.
+            configured = grade.train(base, 'Mode', 'inspect');
+            testCase.verifyGreaterThanOrEqual( ...
+                configured.config.training.early_stopping_patience, 0);
+            testCase.verifyGreaterThanOrEqual( ...
+                configured.config.training.weight_decay, 0);
+            testCase.verifyTrue( ...
+                islogical(configured.config.training.save_every_epoch));
+            testCase.verifyLessThanOrEqual( ...
+                configured.config.augmentation.scale_jitter(2), 1);
+        end
+
+
+
         function smokeModeNeverEvaluatesTheTestSplit(testCase)
             resultsRoot = tempname;
             cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
@@ -178,17 +305,120 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
         end
 
         function augmentBatchStaysWithinJitterEnvelope(testCase)
+            % Photometric envelope in isolation: with the rigid transforms
+            % switched off, a constant image can only be rescaled and
+            % shifted, so no value may leave the gain/bias envelope.
             batch = single(100 * ones([8 8 3 6]));
+            options = struct('rotation', false, 'flips', true, ...
+                'scale_jitter', [1 1], 'brightness_shift', 10, ...
+                'contrast_gain', [0.9 1.1]);
             rng(11, 'twister');
-            augmented = grade.augmentBatch(batch);
+            augmented = grade.augmentBatch(batch, [], options);
 
             testCase.verifyEqual(size(augmented), size(batch));
             testCase.verifyEqual(class(augmented), 'single');
             testCase.verifyTrue(all(isfinite(augmented(:))));
-            % Gain in [0.9, 1.1] and bias in [-10, 10] around constant 100
-            % keeps every value inside this envelope.
             testCase.verifyTrue(all(augmented(:) >= 100 * 0.9 - 10 - 1e-5));
             testCase.verifyTrue(all(augmented(:) <= 100 * 1.1 + 10 + 1e-5));
+        end
+
+        function augmentBatchRotationOnlyFillsOutsideTheFrame(testCase)
+            % Rotation introduces a zero fill in the frame corners. On a
+            % real fundus those corners are already black after the
+            % field-of-view crop, but the invariant worth pinning is that
+            % rotation never invents a value: everything is either the
+            % fill or inside the photometric envelope.
+            batch = single(100 * ones([16 16 3 6]));
+            options = struct('rotation', true, 'flips', false, ...
+                'scale_jitter', [1 1], 'brightness_shift', 10, ...
+                'contrast_gain', [0.9 1.1]);
+            rng(11, 'twister');
+            augmented = grade.augmentBatch(batch, [], options);
+
+            testCase.verifyEqual(size(augmented), size(batch));
+            testCase.verifyTrue(all(isfinite(augmented(:))));
+            % Bilinear resampling interpolates between the content (100)
+            % and the zero fill, so boundary pixels legitimately land
+            % anywhere in [0, 100]. What must hold is that it never
+            % overshoots either end: no rotation may invent intensity
+            % brighter than the brightest real pixel, which is how an
+            % interpolation bug would show up on a fundus as phantom
+            % lesion-bright specks.
+            testCase.verifyGreaterThanOrEqual(min(augmented(:)), ...
+                single(0 * 0.9 - 10 - 1e-3));
+            testCase.verifyLessThanOrEqual(max(augmented(:)), ...
+                single(100 * 1.1 + 10 + 1e-3));
+        end
+
+        function rotationDoesNotOvershootIntoPhantomBrightness(testCase)
+            % Sharper version of the overshoot check on a textured image
+            % with no photometric jitter at all: rotation alone must keep
+            % every pixel inside the original intensity range plus the
+            % zero fill, never above the true maximum.
+            content = single(reshape(linspace(20, 200, 16 * 16 * 3), [16 16 3]));
+            batch = repmat(content, [1 1 1 4]);
+            options = struct('rotation', true, 'flips', false, ...
+                'scale_jitter', [1 1], 'brightness_shift', 0, ...
+                'contrast_gain', [1 1]);
+            rng(23, 'twister');
+            augmented = grade.augmentBatch(batch, [], options);
+
+            testCase.verifyLessThanOrEqual(max(augmented(:)), ...
+                max(content(:)) + 1e-3, ...
+                'Rotation must not create intensity above the source maximum.');
+            testCase.verifyGreaterThanOrEqual(min(augmented(:)), -1e-3, ...
+                'Rotation fill must not go below zero.');
+        end
+
+        function augmentBatchZoomNeverPadsTheFrame(testCase)
+            % scale_jitter is capped at 1 so the crop is always a strict
+            % sub-window: zooming out would need padding, and padded
+            % borders are evidence the camera never captured.
+            batch = single(100 * ones([16 16 3 8]));
+            options = struct('rotation', false, 'flips', false, ...
+                'scale_jitter', [0.5 1.0], 'brightness_shift', 0, ...
+                'contrast_gain', [1 1]);
+            rng(5, 'twister');
+            augmented = grade.augmentBatch(batch, [], options);
+
+            testCase.verifyEqual(size(augmented), size(batch));
+            testCase.verifyEqual(double(augmented(:)), ...
+                100 * ones(numel(augmented), 1), 'AbsTol', 1e-3, ...
+                'A zoom crop of a constant image must stay constant.');
+        end
+
+        function augmentBatchRejectsScaleAboveOne(testCase)
+            batch = single(100 * ones([8 8 3 2]));
+            options = struct('scale_jitter', [1.0 1.2]);
+
+            testCase.verifyError(@() grade.augmentBatch(batch, [], options), ...
+                'grade:InvalidAugmentation');
+        end
+
+        function augmentBatchProducesMoreThanEightOrientations(testCase)
+            % The point of arbitrary-angle rotation: ICDR level 3 has 135
+            % unique images oversampled to about nine repeats per epoch,
+            % and quarter turns plus flips gave it only 8 distinct views.
+            batch = repmat(single(reshape(1:768, [16 16 3])), [1 1 1 1]);
+            views = cell(1, 24);
+            for index = 1:24
+                stream = RandStream('mt19937ar', 'Seed', index);
+                views{index} = grade.augmentBatch(batch, stream);
+            end
+            distinct = 0;
+            for index = 1:24
+                isNew = true;
+                for other = 1:index - 1
+                    if isequal(views{index}, views{other})
+                        isNew = false;
+                        break;
+                    end
+                end
+                distinct = distinct + isNew;
+            end
+
+            testCase.verifyGreaterThan(distinct, 8, ...
+                'Augmentation must reach more than the 8 dihedral views.');
         end
 
         function augmentBatchVariesAcrossSamplesAndSeeds(testCase)
