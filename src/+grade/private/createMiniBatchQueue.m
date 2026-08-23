@@ -3,6 +3,18 @@ function queue = createMiniBatchQueue(imageStore, grades, batchSize, environment
 %   Optional fifth argument enables background prefetch so CPU-side
 %   preprocessing overlaps GPU compute; delivery timing changes only.
 %   Optional sixth argument enables train-only batch augmentation.
+%   Optional seventh argument is the run seed (design doc §13.2), used by
+%   collateData to derive each batch's augmentation stream from
+%   (seed, batch identity) rather than from whichever worker computes it.
+%
+%   DispatchInBackground fans batches out across the whole parallel pool,
+%   and which batch lands in which delivery position from next() is not
+%   guaranteed independent of pool size (verified empirically: two pool
+%   sizes returned the same two batches in swapped order). The seed fix
+%   here makes a given batch's *content* identical no matter who computes
+%   it, but cannot make delivery *order* pool-size-invariant - that
+%   requires DispatchInBackground false, which is this codebase's
+%   default (see config default.json and readConfiguration.m).
 
 if nargin < 5
     dispatchInBackground = true;
@@ -14,14 +26,21 @@ if nargin < 6
 else
     augment = logical(varargin{2});
 end
+if nargin < 7
+    seed = 42;
+else
+    seed = double(varargin{3});
+end
 
+sampleCount = numel(grades);
 labelStore = arrayDatastore(single(grades(:) + 1), ...
     'OutputType', 'same');
-combinedStore = combine(imageStore, labelStore);
+indexStore = arrayDatastore((1:sampleCount).', 'OutputType', 'same');
+combinedStore = combine(imageStore, labelStore, indexStore);
 queue = minibatchqueue(combinedStore, 2, ...
     'MiniBatchSize', batchSize, ...
-    'MiniBatchFcn', @(imageCells, targetCells) ...
-        collateData(imageCells, targetCells, augment), ...
+    'MiniBatchFcn', @(imageCells, targetCells, indexCells) ...
+        collateData(imageCells, targetCells, indexCells, augment, seed), ...
     'OutputCast', {'single', 'single'}, ...
     'OutputAsDlarray', [true, true], ...
     'MiniBatchFormat', {'SSCB', 'CB'}, ...

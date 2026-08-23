@@ -120,7 +120,15 @@ if ~isscalar(gradientThreshold) || ~isfinite(gradientThreshold) || ...
         'training.gradient_threshold must be a non-negative scalar (0 disables clipping).');
 end
 config.training.gradient_threshold = gradientThreshold;
-config.training = localDefault(config.training, 'dispatch_in_background', true);
+% Default false: DispatchInBackground fans batches across the whole
+% parallel pool, and which batch lands in which delivery position from
+% next() is not guaranteed independent of pool size (verified: two pool
+% sizes returned the same two batches in swapped order), so a run is not
+% reproducible across machines with different worker counts (design doc
+% §13.2). collateData seeds augmentation from (seed, batch identity), so
+% turning this back on for throughput no longer produces different pixel
+% content per batch - it can still reorder batches across pool sizes.
+config.training = localDefault(config.training, 'dispatch_in_background', false);
 if ~(islogical(config.training.dispatch_in_background) && ...
         isscalar(config.training.dispatch_in_background))
     error('grade:InvalidDispatchOption', ...

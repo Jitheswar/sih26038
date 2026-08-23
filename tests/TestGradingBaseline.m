@@ -158,6 +158,58 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 'Different seeds must produce different augmentations.');
         end
 
+        function augmentBatchAcceptsExplicitStreamDeterministically(testCase)
+            batch = repmat(single(reshape(0:191, [8 8 3])), [1 1 1 4]) / 255;
+            stream1 = RandStream('mt19937ar', 'Seed', 123);
+            stream2 = RandStream('mt19937ar', 'Seed', 123);
+
+            first = grade.augmentBatch(batch, stream1);
+            second = grade.augmentBatch(batch, stream2);
+
+            testCase.verifyEqual(first, second);
+        end
+
+        function deterministicBatchSeedIsPureAndWellSpread(testCase)
+            seedA = grade.deterministicBatchSeed(42, 1);
+            seedB = grade.deterministicBatchSeed(42, 1);
+            seedC = grade.deterministicBatchSeed(42, 17);
+            seedD = grade.deterministicBatchSeed(7, 1);
+
+            testCase.verifyEqual(seedA, seedB);
+            testCase.verifyNotEqual(seedA, seedC);
+            testCase.verifyNotEqual(seedA, seedD);
+            testCase.verifyClass(seedA, 'uint32');
+            testCase.verifyLessThan(double(seedA), 2^32);
+        end
+
+        function firstBatchContentIsIdenticalAcrossPoolSizes(testCase)
+            % Regression test for design doc §13.2: a training batch's
+            % content must not depend on how many workers are in the
+            % parallel pool. Before the fix, DispatchInBackground let
+            % each worker draw augmentation from its own unseeded global
+            % stream, so the same logical batch came out with different
+            % pixels depending on pool size; collateData now seeds a
+            % RandStream from (config.grading.seed, batch identity)
+            % instead, which this test exercises through the same
+            % minibatchqueue construction createMiniBatchQueue.m uses.
+            availableCores = feature('numcores');
+            testCase.assumeTrue(availableCores > 2, ...
+                'Needs at least 3 cores to compare two distinct pool sizes.');
+            largePoolSize = min(6, availableCores);
+
+            result = grade.train(TestGradingBaseline.defaultConfig(), 'Mode', 'inspect');
+            config = result.config;
+            stores = result.datastores;
+            data = result.data;
+
+            cleanupPool = onCleanup(@() TestGradingBaseline.deleteAnyPool()); %#ok<NASGU>
+
+            hashSmallPool = TestGradingBaseline.firstBatchHash(config, stores, data, 2);
+            hashLargePool = TestGradingBaseline.firstBatchHash(config, stores, data, largePoolSize);
+
+            testCase.verifyEqual(hashSmallPool, hashLargePool);
+        end
+
         function evaluateTestIsRejectedOutsideNormalMode(testCase)
             testCase.verifyError(@() grade.train(TestGradingBaseline.defaultConfig(), ...
                 'Mode', 'smoke', 'EvaluateTest', true), 'grade:InvalidEvaluateTest');
@@ -180,6 +232,58 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
             if isfolder(directory)
                 rmdir(directory, 's');
             end
+        end
+
+        function deleteAnyPool()
+            existingPool = gcp('nocreate');
+            if ~isempty(existingPool)
+                delete(existingPool);
+            end
+        end
+
+        function hexHash = firstBatchHash(config, stores, data, poolSize)
+            TestGradingBaseline.deleteAnyPool();
+            parpool('local', poolSize);
+
+            seed = config.grading.seed;
+            sampleCount = numel(data.train.grades);
+            labelStore = arrayDatastore(single(data.train.grades(:) + 1), ...
+                'OutputType', 'same');
+            indexStore = arrayDatastore((1:sampleCount).', 'OutputType', 'same');
+            combinedStore = combine(stores.train, labelStore, indexStore);
+
+            queue = minibatchqueue(combinedStore, 2, ...
+                'MiniBatchSize', config.grading.batch_size, ...
+                'MiniBatchFcn', @(imageCells, targetCells, indexCells) ...
+                    TestGradingBaseline.collateForHash( ...
+                        imageCells, targetCells, indexCells, seed), ...
+                'OutputCast', {'single', 'single'}, ...
+                'OutputAsDlarray', [true, true], ...
+                'MiniBatchFormat', {'SSCB', 'CB'}, ...
+                'OutputEnvironment', "cpu", ...
+                'PartialMiniBatch', 'return', ...
+                'DispatchInBackground', config.training.dispatch_in_background);
+
+            [images, ~] = next(queue);
+            bytes = typecast(single(gather(extractdata(images(:)))), 'uint8');
+            digest = java.security.MessageDigest.getInstance('SHA-256');
+            hexHash = sprintf('%02x', typecast(digest.digest(bytes), 'uint8'));
+        end
+
+        function [images, targets] = collateForHash(imageCells, targetCells, indexCells, seed)
+            % Mirrors +grade/private/collateData.m's augmentation path,
+            % calling the same public grade.deterministicBatchSeed and
+            % grade.augmentBatch functions collateData calls; the
+            % minibatchqueue wiring itself is duplicated from
+            % +grade/private/createMiniBatchQueue.m only because MATLAB
+            % refuses to add a "private" folder to the path from outside
+            % its parent package.
+            images = cat(4, imageCells{:});
+            batchIndices = double(cell2mat(indexCells));
+            batchSeed = grade.deterministicBatchSeed(seed, min(batchIndices(:)));
+            stream = RandStream('mt19937ar', 'Seed', batchSeed);
+            images = grade.augmentBatch(images, stream);
+            targets = reshape(single(cell2mat(targetCells)), 1, []);
         end
     end
 end

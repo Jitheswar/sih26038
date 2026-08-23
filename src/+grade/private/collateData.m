@@ -1,11 +1,19 @@
-function [images, targets] = collateData(imageCells, targetCells, augment)
+function [images, targets] = collateData(imageCells, targetCells, indexCells, augment, seed)
 %COLLATEDATA Concatenate lazy image records into a CNN mini-batch.
-%   The optional third argument enables train-only augmentation, applied
-%   per sample on the client side so randomness stays on the seeded
-%   global stream (design doc §13.2).
+%   The optional fourth argument enables train-only augmentation. Under
+%   DispatchInBackground this function runs on a parallel pool worker,
+%   not on the client, and each worker owns its own independent,
+%   unseeded global stream. Augmentation draws come instead from a
+%   RandStream seeded deterministically from SEED and this batch's
+%   original sample indices (INDEXCELLS), so every worker computes the
+%   same result for the same batch regardless of which worker it is or
+%   how many workers exist (design doc §13.2).
 
-if nargin < 3
+if nargin < 4
     augment = false;
+end
+if nargin < 5
+    seed = 42;
 end
 
 if iscell(imageCells)
@@ -15,7 +23,14 @@ else
 end
 
 if augment
-    images = grade.augmentBatch(images);
+    if iscell(indexCells)
+        batchIndices = double(cell2mat(indexCells));
+    else
+        batchIndices = double(indexCells);
+    end
+    batchSeed = grade.deterministicBatchSeed(seed, min(batchIndices(:)));
+    stream = RandStream('mt19937ar', 'Seed', batchSeed);
+    images = grade.augmentBatch(images, stream);
 end
 
 if iscell(targetCells)
