@@ -82,6 +82,50 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
             testCase.verifyFalse(result.checkpointSelection.testUsed);
         end
 
+        function trainingAdvancesBatchNormalizationState(testCase)
+            % Regression test: forward() computes batch normalization from
+            % mini-batch statistics and returns the updated running
+            % statistics as a second output. If the training loop drops
+            % that output, net.State keeps its ImageNet values forever
+            % while the weights fine-tune away from them - and
+            % evaluateNetwork scores validation with predict(), which
+            % reads net.State. Training loss then falls while validation
+            % loss rises and predictions collapse onto a single class,
+            % with no error raised anywhere.
+            %
+            % Smoke mode freezes the backbone through freezeBackboneGradients,
+            % which acts on gradients only. So any change to these running
+            % statistics can only have come from state propagation, never
+            % from a weight update.
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestGradingBaseline.removeDirectory(resultsRoot)); %#ok<NASGU>
+
+            pristine = grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'inspect');
+            trained = grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'smoke', 'ResultsRoot', resultsRoot);
+
+            beforeState = pristine.network.State;
+            afterState = trained.network.State;
+            testCase.assertEqual(height(afterState), height(beforeState));
+            testCase.assertGreaterThan(height(beforeState), 0, ...
+                'ResNet-50 must expose batch normalization state.');
+
+            changed = 0;
+            for index = 1:height(beforeState)
+                before = gather(extractdata(beforeState.Value{index}));
+                after = gather(extractdata(afterState.Value{index}));
+                testCase.verifyTrue(all(isfinite(after(:))), ...
+                    'Batch normalization state must stay finite.');
+                if ~isequal(before, after)
+                    changed = changed + 1;
+                end
+            end
+
+            testCase.verifyEqual(changed, height(beforeState), ...
+                'Every batch normalization running statistic must advance during training.');
+        end
+
         % The EvaluateTest opt-in path is deliberately not exercised end to
         % end by this automated suite: the held-out test split is touched
         % once, by hand, after the operating point is frozen (see

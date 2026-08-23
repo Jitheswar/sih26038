@@ -129,8 +129,17 @@ for epoch = 1:maxEpochs
     while hasdata(trainQueue)
         [images, targets] = next(trainQueue);
         iteration = iteration + 1;
-        [loss, gradients] = dlfeval( ...
+        [loss, gradients, state] = dlfeval( ...
             @modelGradients, net, images, targets, classWeightValues);
+        % Carry the batch normalization running statistics forward. Without
+        % this, forward() trains against mini-batch statistics while
+        % predict() scores validation against the untouched ImageNet ones,
+        % and the two drift apart every epoch: training loss falls while
+        % validation loss rises and predictions collapse onto one class.
+        % Backbone freezing acts on gradients only, so warmup epochs still
+        % adapt these statistics to the fundus domain, which is what makes
+        % epoch-1 validation meaningful.
+        net.State = state;
         if freezeBackbone
             gradients = freezeBackboneGradients(gradients);
         end
