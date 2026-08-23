@@ -21,7 +21,12 @@
   },
   "training": {
     "max_epochs": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.00002,
+    "warmup_epochs": 2,
+    "warmup_learning_rate": 0.001,
+    "gradient_threshold": 10,
+    "dispatch_in_background": true,
+    "augmentation": true,
     "gradient_decay_factor": 0.9,
     "squared_gradient_decay_factor": 0.999,
     "epsilon": 0.00000001,
@@ -31,7 +36,8 @@
     "smoke_freeze_backbone": true
   },
   "class_balancing": {
-    "method": "inverse_frequency"
+    "method": "inverse_frequency",
+    "oversampling": true
   },
   "data": {
     "dataset": "APTOS"

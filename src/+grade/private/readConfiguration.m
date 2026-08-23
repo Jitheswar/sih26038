@@ -86,6 +86,53 @@ config.training = localDefault(config.training, 'smoke_examples_per_class', 2);
 config.training = localDefault(config.training, 'smoke_batch_size', 2);
 config.training = localDefault(config.training, 'smoke_freeze_backbone', true);
 
+config.training = localDefault(config.training, 'warmup_epochs', 2);
+warmupEpochs = double(config.training.warmup_epochs);
+if ~isscalar(warmupEpochs) || ~isfinite(warmupEpochs) || ...
+        warmupEpochs < 0 || warmupEpochs ~= floor(warmupEpochs)
+    error('grade:InvalidWarmupEpochs', ...
+        'training.warmup_epochs must be a non-negative integer.');
+end
+config.training.warmup_epochs = warmupEpochs;
+if warmupEpochs >= config.training.max_epochs
+    error('grade:InvalidWarmupEpochs', ...
+        'training.warmup_epochs must leave at least one full-finetune epoch.');
+end
+config.training = localDefault(config.training, 'warmup_learning_rate', 1e-3);
+warmupLearningRate = double(config.training.warmup_learning_rate);
+if ~isscalar(warmupLearningRate) || ~isfinite(warmupLearningRate) || ...
+        warmupLearningRate <= 0
+    error('grade:InvalidLearningRate', ...
+        'training.warmup_learning_rate must be a positive scalar.');
+end
+config.training.warmup_learning_rate = warmupLearningRate;
+learningRate = double(config.training.learning_rate);
+if ~isscalar(learningRate) || ~isfinite(learningRate) || learningRate <= 0
+    error('grade:InvalidLearningRate', ...
+        'training.learning_rate must be a positive scalar.');
+end
+config.training.learning_rate = learningRate;
+config.training = localDefault(config.training, 'gradient_threshold', 10);
+gradientThreshold = double(config.training.gradient_threshold);
+if ~isscalar(gradientThreshold) || ~isfinite(gradientThreshold) || ...
+        gradientThreshold < 0
+    error('grade:InvalidGradientThreshold', ...
+        'training.gradient_threshold must be a non-negative scalar (0 disables clipping).');
+end
+config.training.gradient_threshold = gradientThreshold;
+config.training = localDefault(config.training, 'dispatch_in_background', true);
+if ~(islogical(config.training.dispatch_in_background) && ...
+        isscalar(config.training.dispatch_in_background))
+    error('grade:InvalidDispatchOption', ...
+        'training.dispatch_in_background must be a logical scalar.');
+end
+config.training = localDefault(config.training, 'augmentation', true);
+if ~(islogical(config.training.augmentation) && ...
+        isscalar(config.training.augmentation))
+    error('grade:InvalidAugmentationFlag', ...
+        'training.augmentation must be a logical scalar.');
+end
+
 if ~isfield(config, 'class_balancing') || ~isstruct(config.class_balancing)
     config.class_balancing = struct();
 end
@@ -94,6 +141,13 @@ config.class_balancing = localDefault(config.class_balancing, ...
 if ~strcmpi(char(config.class_balancing.method), 'inverse_frequency')
     error('grade:UnsupportedClassBalancing', ...
         'The baseline uses inverse-frequency class-weighted loss.');
+end
+config.class_balancing = localDefault(config.class_balancing, ...
+    'oversampling', true);
+if ~(islogical(config.class_balancing.oversampling) && ...
+        isscalar(config.class_balancing.oversampling))
+    error('grade:InvalidOversamplingFlag', ...
+        'class_balancing.oversampling must be a logical scalar.');
 end
 
 if ~isfield(config, 'data') || ~isstruct(config.data)

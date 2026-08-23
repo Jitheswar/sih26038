@@ -102,6 +102,62 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 fullfile(char(result.resultsDirectory), 'test_metrics.mat')));
         end
 
+        function preprocessedCacheServesIdenticalImages(testCase)
+            % The preprocessing memoisation must serve byte-identical
+            % tensors. Preprocessing itself is deterministic, so a warmed
+            % cache must reproduce the freshly computed result exactly.
+            first = grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'inspect');
+            sampleCount = 3;
+            freshImages = cell(sampleCount, 1);
+            for index = 1:sampleCount
+                freshImages{index} = read(first.datastores.train);
+            end
+
+            % A second store over the same files is served from cache.
+            second = grade.train(TestGradingBaseline.defaultConfig(), ...
+                'Mode', 'inspect');
+            for index = 1:sampleCount
+                testCase.verifyEqual(read(second.datastores.train), ...
+                    freshImages{index});
+            end
+        end
+
+        function augmentBatchIsDeterministicUnderSeed(testCase)
+            batch = repmat(single(reshape(0:191, [8 8 3])), [1 1 1 4]) / 255;
+            rng(7, 'twister');
+            first = grade.augmentBatch(batch);
+            rng(7, 'twister');
+            second = grade.augmentBatch(batch);
+
+            testCase.verifyEqual(first, second);
+        end
+
+        function augmentBatchStaysWithinJitterEnvelope(testCase)
+            batch = single(100 * ones([8 8 3 6]));
+            rng(11, 'twister');
+            augmented = grade.augmentBatch(batch);
+
+            testCase.verifyEqual(size(augmented), size(batch));
+            testCase.verifyEqual(class(augmented), 'single');
+            testCase.verifyTrue(all(isfinite(augmented(:))));
+            % Gain in [0.9, 1.1] and bias in [-10, 10] around constant 100
+            % keeps every value inside this envelope.
+            testCase.verifyTrue(all(augmented(:) >= 100 * 0.9 - 10 - 1e-5));
+            testCase.verifyTrue(all(augmented(:) <= 100 * 1.1 + 10 + 1e-5));
+        end
+
+        function augmentBatchVariesAcrossSamplesAndSeeds(testCase)
+            batch = repmat(single(reshape(0:191, [8 8 3])), [1 1 1 16]);
+            rng(3, 'twister');
+            first = grade.augmentBatch(batch);
+            rng(31337, 'twister');
+            second = grade.augmentBatch(batch);
+
+            testCase.verifyTrue(~isequal(first, second), ...
+                'Different seeds must produce different augmentations.');
+        end
+
         function evaluateTestIsRejectedOutsideNormalMode(testCase)
             testCase.verifyError(@() grade.train(TestGradingBaseline.defaultConfig(), ...
                 'Mode', 'smoke', 'EvaluateTest', true), 'grade:InvalidEvaluateTest');

@@ -1,6 +1,7 @@
 data/raw/
 data/sealed/
 results/
+.cache/
 *.asv
 *.slxc
 slprj/

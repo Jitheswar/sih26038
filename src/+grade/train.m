@@ -28,17 +28,21 @@ for splitIndex = 1:numel(splitNames)
     allData.(char(splitName)) = loadSplitData(config, projectRoot, splitName);
 end
 
-classWeightValues = classWeights(allData.train.classCounts);
+selectedData = allData;
+selectedData.train = localOversampleMinorities( ...
+    selectedData.train, config.class_balancing.oversampling);
+
+% Class weights follow the resampled training counts, so fully balanced
+% sampling leaves them near uniform instead of double-correcting.
+classWeightValues = classWeights(selectedData.train.classCounts);
 if strcmp(mode, "smoke")
-    selectedData = allData;
     selectedData.train = selectSmokeSubset( ...
-        allData.train, config.training.smoke_examples_per_class);
+        selectedData.train, config.training.smoke_examples_per_class);
     selectedData.validation = selectSmokeSubset( ...
         allData.validation, config.training.smoke_examples_per_class);
     batchSize = config.training.smoke_batch_size;
     maxEpochs = config.training.smoke_epochs;
 else
-    selectedData = allData;
     batchSize = config.grading.batch_size;
     maxEpochs = config.training.max_epochs;
 end
@@ -80,13 +84,17 @@ fprintf('Dataset: APTOS | input: %dx%dx3 | batch size: %d | epochs: %d\n', ...
     config.grading.input_size, config.grading.input_size, batchSize, maxEpochs);
 
 trainQueue = createMiniBatchQueue(stores.train, selectedData.train.grades, ...
-    batchSize, environment);
+    batchSize, environment, config.training.dispatch_in_background, ...
+    config.training.augmentation);
 validationQueue = createMiniBatchQueue(stores.validation, ...
-    selectedData.validation.grades, batchSize, environment);
+    selectedData.validation.grades, batchSize, environment, ...
+    config.training.dispatch_in_background, false);
 
 history = struct();
 history.validation = repmat(localEmptyMetric(), 0, 1);
 history.trainingLoss = zeros(maxEpochs, 1);
+history.learningRate = zeros(maxEpochs, 1);
+history.backboneFrozen = false(maxEpochs, 1);
 history.epochsCompleted = 0;
 history.batchSize = batchSize;
 history.inputSize = config.modelConfig.inputSize;
@@ -100,9 +108,22 @@ bestValidationLoss = Inf;
 bestEpoch = 0;
 bestCheckpoint = fullfile(resultsDirectory, 'best_model.mat');
 
+warmupEpochs = config.training.warmup_epochs;
+gradientThreshold = config.training.gradient_threshold;
+
 for epoch = 1:maxEpochs
+    inWarmup = epoch <= warmupEpochs && ~strcmp(mode, "smoke");
+    if inWarmup
+        epochLearningRate = config.training.warmup_learning_rate;
+    else
+        epochLearningRate = config.training.learning_rate;
+    end
+    fprintf('EPOCH %d: lr %.1e | backbone %s\n', epoch, epochLearningRate, ...
+        localFrozenLabel(mode, inWarmup));
     shuffle(trainQueue);
     reset(trainQueue);
+    freezeBackbone = (strcmp(mode, "smoke") && ...
+        config.training.smoke_freeze_backbone) || inWarmup;
     epochLoss = 0;
     epochSamples = 0;
     while hasdata(trainQueue)
@@ -110,12 +131,15 @@ for epoch = 1:maxEpochs
         iteration = iteration + 1;
         [loss, gradients] = dlfeval( ...
             @modelGradients, net, images, targets, classWeightValues);
-        if strcmp(mode, "smoke") && config.training.smoke_freeze_backbone
+        if freezeBackbone
             gradients = freezeBackboneGradients(gradients);
+        end
+        if gradientThreshold > 0
+            gradients = localClipGradients(gradients, gradientThreshold);
         end
         [net, averageGrad, averageSqGrad] = adamupdate(net, gradients, ...
             averageGrad, averageSqGrad, iteration, ...
-            config.training.learning_rate, ...
+            epochLearningRate, ...
             config.training.gradient_decay_factor, ...
             config.training.squared_gradient_decay_factor, ...
             config.training.epsilon);
@@ -125,6 +149,9 @@ for epoch = 1:maxEpochs
     end
 
     history.trainingLoss(epoch) = epochLoss / max(epochSamples, 1);
+    history.learningRate(epoch) = epochLearningRate;
+    history.backboneFrozen(epoch) = freezeBackbone;
+    fprintf('TRAIN epoch %d: Loss: %.6f\n', epoch, history.trainingLoss(epoch));
     validationMetric = evaluateNetwork(net, validationQueue, classWeightValues, ...
         epoch, "validation");
     history.validation(epoch) = localMetricForHistory(validationMetric);
@@ -161,7 +188,7 @@ testMetric = [];
 testEvaluated = strcmp(mode, "normal") && evaluateTest;
 if testEvaluated
     testQueue = createMiniBatchQueue(stores.test, selectedData.test.grades, ...
-        batchSize, environment);
+        batchSize, environment, config.training.dispatch_in_background, false);
     testMetric = evaluateNetwork(net, testQueue, classWeightValues, ...
         bestEpoch, "test");
     testMetric = localMetricForHistory(testMetric);
@@ -178,6 +205,64 @@ result.testMetrics = testMetric;
 result.gpuUsed = environment == "gpu";
 result.checkpointSelection.testUsed = testEvaluated;
 result.checkpointSelection.bestEpoch = bestEpoch;
+end
+
+function data = localOversampleMinorities(data, enabled)
+%LOCALOVERSAMPLEMINORITIES Duplicate training rows so every grade appears
+%   equally often per epoch (design doc §7.4 remedy two). Duplicates stay
+%   inside the training split; validation, calibration and test keep the
+%   true deployment distribution. Selection is deterministic: rows of each
+%   minority class are repeated in file order until the class reaches the
+%   majority count.
+
+if ~enabled
+    return;
+end
+counts = data.classCounts(:);
+target = max(counts);
+extraRows = zeros(0, 1);
+for level = 0:4
+    need = target - counts(level + 1);
+    if need <= 0
+        continue;
+    end
+    candidates = find(data.grades == level);
+    repetitions = repmat(candidates, ceil(need / numel(candidates)), 1);
+    extraRows = [extraRows; repetitions(1:need)]; %#ok<AGROW>
+end
+data.table = data.table([(1:numel(data.grades)).'; extraRows], :);
+data.files = [data.files; data.files(extraRows)];
+data.grades = [data.grades; data.grades(extraRows)];
+data.classCounts = arrayfun(@(level) sum(data.grades == level), 0:4).';
+data.count = numel(data.grades);
+data.oversampled = true;
+end
+
+function gradients = localClipGradients(gradients, threshold)
+%LOCALCLIPGRADIENTS Rescale gradients so their global L2 norm is at most
+%   the configured threshold. Gradients mirror net.Learnables: a table with
+%   a Value column of dlarrays.
+
+normSquared = 0;
+for index = 1:numel(gradients.Value)
+    normSquared = normSquared + sum(extractdata(gradients.Value{index}).^2, 'all');
+end
+globalNorm = sqrt(double(normSquared));
+if globalNorm <= threshold || ~isfinite(globalNorm)
+    return;
+end
+scale = single(threshold / globalNorm);
+gradients = dlupdate(@(g) g * scale, gradients);
+end
+
+function label = localFrozenLabel(mode, inWarmup)
+if strcmp(mode, "smoke")
+    label = "frozen (smoke)";
+elseif inWarmup
+    label = "frozen (warmup)";
+else
+    label = "trainable";
+end
 end
 
 function result = localConfiguredResult(config, configText, data, stores, weights, net)
