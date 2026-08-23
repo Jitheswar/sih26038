@@ -257,7 +257,63 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
                 configured.config.augmentation.scale_jitter(2), 1);
         end
 
+        function cacheKeyIgnoresFieldsPreprocessingNeverReads(testCase)
+            % Changing a training hyperparameter must not invalidate the
+            % preprocessed-image cache. On 2026-08-23 adding grading.dropout
+            % and training.weight_decay silently invalidated 16 GB of cache
+            % and cost an hour re-preprocessing 2564 unchanged images,
+            % because the key hashed the entire configuration.
+            base = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            imagePath = TestGradingBaseline.firstTrainingImagePath();
 
+            reference = TestGradingBaseline.cacheKeyFor(imagePath, base);
+
+            unrelated = base;
+            unrelated.grading.dropout = 0.25;
+            unrelated.training.weight_decay = 0.99;
+            unrelated.training.max_epochs = 3;
+            unrelated.training.early_stopping_patience = 1;
+            unrelated.augmentation.rotation = false;
+            unrelated.decision_policy.autoClearThreshold = 0.11;
+            testCase.verifyEqual( ...
+                TestGradingBaseline.cacheKeyFor(imagePath, unrelated), reference, ...
+                'Training-only settings must not change the cache key.');
+        end
+
+        function cacheKeyChangesWhenPreprocessingChanges(testCase)
+            % The dangerous direction: if a field that DOES change the
+            % pixels is left out of the key, the cache serves stale images
+            % for a changed pipeline and no metric will ever name it.
+            base = jsondecode(fileread(TestGradingBaseline.defaultConfig()));
+            imagePath = TestGradingBaseline.firstTrainingImagePath();
+            reference = TestGradingBaseline.cacheKeyFor(imagePath, base);
+
+            variants = struct('name', {}, 'config', {});
+            v = base; v.pipeline.quality_gate = ~base.pipeline.quality_gate;
+            variants(end+1) = struct('name', 'pipeline.quality_gate', 'config', v);
+            v = base; v.pipeline.enhancement = ~base.pipeline.enhancement;
+            variants(end+1) = struct('name', 'pipeline.enhancement', 'config', v);
+            v = base; v.grading.input_size = 512;
+            variants(end+1) = struct('name', 'grading.input_size', 'config', v);
+            v = base; v.preprocessing.output_type = 'double';
+            variants(end+1) = struct('name', 'preprocessing.output_type', 'config', v);
+            v = base; v.preprocessing.channel_mean = [0.1 0.1 0.1];
+            variants(end+1) = struct('name', 'preprocessing.channel_mean', 'config', v);
+            v = base; v.preprocessing.channel_std = [0.5 0.5 0.5];
+            variants(end+1) = struct('name', 'preprocessing.channel_std', 'config', v);
+            v = base; v.preprocessing.fov_mode = 'mask';
+            variants(end+1) = struct('name', 'preprocessing.fov_mode', 'config', v);
+            v = base; v.preprocessing.clahe = false;
+            variants(end+1) = struct('name', 'preprocessing.clahe', 'config', v);
+
+            for index = 1:numel(variants)
+                testCase.verifyNotEqual( ...
+                    TestGradingBaseline.cacheKeyFor(imagePath, variants(index).config), ...
+                    reference, sprintf( ...
+                    ['Changing %s changes the preprocessed pixels, so it ' ...
+                    'must change the cache key.'], variants(index).name));
+            end
+        end
 
         function smokeModeNeverEvaluatesTheTestSplit(testCase)
             resultsRoot = tempname;
@@ -500,6 +556,18 @@ classdef TestGradingBaseline < matlab.unittest.TestCase
             testFile = which('TestGradingBaseline');
             projectRoot = fileparts(fileparts(testFile));
             configFile = fullfile(projectRoot, 'config', 'default.json');
+        end
+
+        function key = cacheKeyFor(imagePath, config)
+            key = grade.preprocessingCacheKey(imagePath, config);
+        end
+
+        function imagePath = firstTrainingImagePath()
+            testFile = which('TestGradingBaseline');
+            projectRoot = fileparts(fileparts(testFile));
+            split = readtable(fullfile(projectRoot, 'data', 'splits', ...
+                'train.csv'), 'TextType', 'string');
+            imagePath = fullfile(projectRoot, split.relative_path(1));
         end
 
         function removeDirectory(directory)

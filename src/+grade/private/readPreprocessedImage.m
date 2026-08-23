@@ -22,21 +22,16 @@ localStoreCache(cacheFile, image);
 end
 
 function cacheFile = localCacheFile(filename, config)
+%LOCALCACHEFILE Resolve the memo file for one image under one config.
+%   The key itself is computed by grade.preprocessingCacheKey, which is
+%   public so the "training settings must not invalidate the cache" and
+%   "preprocessing settings must invalidate the cache" invariants can be
+%   tested directly rather than inferred from timing.
+
 thisFile = mfilename('fullpath');
 projectRoot = fileparts(fileparts(fileparts(fileparts(thisFile))));
 
-fileMetadata = dir(filename);
-if isscalar(fileMetadata)
-    identity = sprintf('|%s|%d|%d', ...
-        char(string(filename)), fileMetadata.datenum, fileMetadata.bytes);
-else
-    error('grade:MissingImage', 'Image file does not exist: %s', filename);
-end
-
-keyText = [identity, '|', jsonencode(config)];
-digest = java.security.MessageDigest.getInstance('SHA-256');
-hashed = typecast(digest.digest(uint8(keyText)), 'uint64');
-key = sprintf('%016x%016x%016x%016x', hashed(1), hashed(2), hashed(3), hashed(4));
+key = grade.preprocessingCacheKey(filename, config);
 
 cacheDirectory = fullfile(projectRoot, '.cache', 'preprocessed_v1');
 if ~isfolder(cacheDirectory)
