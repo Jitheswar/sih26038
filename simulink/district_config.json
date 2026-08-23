@@ -16,39 +16,111 @@
   "uploadRetryIntervalSeconds": 3600,
   "numberOfGraders": 2,
   "graderServiceTimeSeconds": 30,
-  "modelSensitivity": 0.90,
-  "modelSpecificity": 0.85,
-  "deferralRate": 0.10,
+  "modelSensitivity": 0.96,
+  "modelSpecificity": 0.9167,
+  "deferralRate": 0.1,
   "turnaroundTargetHours": 24,
   "randomSeed": 42,
-  "referablePrevalence": 0.10,
+  "referablePrevalence": 0.1,
   "connectivityCycleSeconds": 86400,
   "failedCaptureRouting": "escalate",
   "qualityGateEnabled": true,
   "parameterMetadata": {
-    "annualScreeningVolume": {"assumed": false, "source": "R5.2 district planning scenario"},
-    "simulationDurationDays": {"assumed": false, "source": "Planning horizon"},
-    "numberOfPHCs": {"assumed": true, "source": "Scenario parameter until district inventory is supplied"},
-    "arrivalMode": {"assumed": true, "source": "Scenario parameter; camp-day process is illustrative"},
-    "arrivalRate": {"assumed": false, "source": "Derived from annualScreeningVolume / simulationDurationDays / 86400"},
-    "campBurstMultiplier": {"assumed": true, "source": "Placeholder until camp attendance logs are available"},
-    "captureTimeSeconds": {"assumed": true, "source": "Placeholder until PHC workflow timing is measured"},
-    "qualityGateTimeSeconds": {"assumed": true, "source": "Placeholder until target-hardware timing is measured"},
-    "qualityRejectionRate": {"assumed": true, "source": "Placeholder; the 21 percent field result is external context, not a project measurement"},
-    "maximumRecaptureAttempts": {"assumed": false, "source": "Project policy"},
-    "inferenceTimeSeconds": {"assumed": true, "source": "Placeholder until the actual screening pipeline is benchmarked"},
-    "imageSizeMegabytes": {"assumed": true, "source": "Placeholder until encoded report payloads are measured"},
-    "bandwidthMegabitsPerSecond": {"assumed": true, "source": "Placeholder until district connectivity is measured"},
-    "connectivityAvailability": {"assumed": true, "source": "Placeholder until uptime logs are available"},
-    "uploadRetryIntervalSeconds": {"assumed": true, "source": "Placeholder store-and-forward retry interval"},
-    "numberOfGraders": {"assumed": true, "source": "Scenario parameter swept by E1"},
-    "graderServiceTimeSeconds": {"assumed": true, "source": "Placeholder until the reader study reports service time"},
-    "modelSensitivity": {"assumed": true, "source": "Placeholder until the evaluation harness is frozen"},
-    "modelSpecificity": {"assumed": true, "source": "Placeholder until the evaluation harness is frozen"},
-    "deferralRate": {"assumed": true, "source": "Placeholder until the decision policy risk-coverage curve is measured"},
-    "turnaroundTargetHours": {"assumed": true, "source": "Planning target"},
-    "randomSeed": {"assumed": false, "source": "Reproducibility control"},
-    "referablePrevalence": {"assumed": true, "source": "Placeholder for E2 workload calculation"},
-    "connectivityCycleSeconds": {"assumed": true, "source": "Placeholder daily connectivity cycle"}
+    "annualScreeningVolume": {
+      "assumed": false,
+      "source": "R5.2 district planning scenario"
+    },
+    "simulationDurationDays": {
+      "assumed": false,
+      "source": "Planning horizon"
+    },
+    "numberOfPHCs": {
+      "assumed": true,
+      "source": "Scenario parameter until district inventory is supplied"
+    },
+    "arrivalMode": {
+      "assumed": true,
+      "source": "Scenario parameter; camp-day process is illustrative"
+    },
+    "arrivalRate": {
+      "assumed": false,
+      "source": "Derived from annualScreeningVolume / simulationDurationDays / 86400"
+    },
+    "campBurstMultiplier": {
+      "assumed": true,
+      "source": "Placeholder until camp attendance logs are available"
+    },
+    "captureTimeSeconds": {
+      "assumed": true,
+      "source": "Placeholder until PHC workflow timing is measured"
+    },
+    "qualityGateTimeSeconds": {
+      "assumed": true,
+      "source": "Placeholder until target-hardware timing is measured"
+    },
+    "qualityRejectionRate": {
+      "assumed": true,
+      "source": "Placeholder; the 21 percent field result is external context, not a project measurement"
+    },
+    "maximumRecaptureAttempts": {
+      "assumed": false,
+      "source": "Project policy"
+    },
+    "inferenceTimeSeconds": {
+      "assumed": true,
+      "source": "Placeholder until the actual screening pipeline is benchmarked"
+    },
+    "imageSizeMegabytes": {
+      "assumed": true,
+      "source": "Placeholder until encoded report payloads are measured"
+    },
+    "bandwidthMegabitsPerSecond": {
+      "assumed": true,
+      "source": "Placeholder until district connectivity is measured"
+    },
+    "connectivityAvailability": {
+      "assumed": true,
+      "source": "Placeholder until uptime logs are available"
+    },
+    "uploadRetryIntervalSeconds": {
+      "assumed": true,
+      "source": "Placeholder store-and-forward retry interval"
+    },
+    "numberOfGraders": {
+      "assumed": true,
+      "source": "Scenario parameter swept by E1"
+    },
+    "graderServiceTimeSeconds": {
+      "assumed": true,
+      "source": "Placeholder until the reader study reports service time"
+    },
+    "modelSensitivity": {
+      "assumed": false,
+      "source": "Measured on the internal test split at the operating point frozen 2026-08-23: 0.9600 (95% Wilson CI 0.8889-0.9863, 72/75). results/20260823_211537_internal_test"
+    },
+    "modelSpecificity": {
+      "assumed": false,
+      "source": "Measured on the internal test split at the operating point frozen 2026-08-23: 0.9167 (95% Wilson CI 0.8492-0.9555, 99/108). results/20260823_211537_internal_test"
+    },
+    "deferralRate": {
+      "assumed": true,
+      "source": "Retained at 0.10 as a conservative planning value. Probability-gate escalation measured at 0.066 (internal test) and 0.076 (validation); those are LOWER bounds because grade.decisionPolicy also escalates on evidence, agreement and rule-engine conditions not simulable from probabilities alone. Full-pipeline measurement still outstanding."
+    },
+    "turnaroundTargetHours": {
+      "assumed": true,
+      "source": "Planning target"
+    },
+    "randomSeed": {
+      "assumed": false,
+      "source": "Reproducibility control"
+    },
+    "referablePrevalence": {
+      "assumed": true,
+      "source": "Retained at 0.10 as a screening-population planning value. Deliberately NOT set to the 0.41 referable fraction of the APTOS test split: APTOS is a competition dataset enriched for disease, not a screening cohort, and using its prevalence would badly distort the workload model."
+    },
+    "connectivityCycleSeconds": {
+      "assumed": true,
+      "source": "Placeholder daily connectivity cycle"
+    }
   }
 }
