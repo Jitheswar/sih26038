@@ -811,9 +811,22 @@ classdef ScreeningApp < handle
         end
 
         function selectImage(app)
-            [filename, directory] = uigetfile( ...
-                {'*.png;*.jpg;*.jpeg;*.tif;*.tiff', 'Fundus images'}, ...
-                'Select fundus image');
+            try
+                [filename, directory] = uigetfile( ...
+                    {'*.png;*.jpg;*.jpeg;*.tif;*.tiff', 'Fundus images'}, ...
+                    'Select fundus image');
+            catch exception
+                % A blocking file dialog is refused whenever MATLAB was
+                % started non-interactively.  Losing the file chooser must not
+                % leave the operator with no way to load a case at all, so the
+                % path field takes over the same slot in the card.
+                app.ImagePathField.Visible = 'on';
+                app.CaseNameValue.Visible = 'off';
+                app.showError(['File chooser unavailable (', ...
+                    exception.message, ') Type or paste an image path into ', ...
+                    'the field instead.']);
+                return;
+            end
             if isequal(filename, 0)
                 return;
             end

@@ -89,9 +89,16 @@ trap on_interrupt INT TERM HUP
 trap stop_matlab EXIT
 
 run_matlab() {
-    # stdin is closed deliberately. A backgrounded job would otherwise inherit
-    # the terminal and compete with this script for it.
-    "$MATLAB_BIN" "$@" < /dev/null &
+    # A background job in a non-interactive shell has no separate process
+    # group, so it stays in the terminal's foreground group and may read the
+    # tty without being stopped by SIGTTIN. The GUI needs that: MATLAB must
+    # stay in its interactive configuration or every blocking dialog,
+    # uigetfile included, refuses to open.
+    if [[ -r /dev/tty ]]; then
+        "$MATLAB_BIN" "$@" < /dev/tty &
+    else
+        "$MATLAB_BIN" "$@" < /dev/null &
+    fi
     MATLAB_PID=$!
     local status=0
     wait "$MATLAB_PID" || status=$?
@@ -172,15 +179,16 @@ launch_gui() {
     head2 "Launching the screening GUI"
     say "${DIM}Close the app window, or press Ctrl+C here, to return to this shell.${RESET}"
     say ""
-    # The -batch argument must be a single line. A multi-line string is
-    # silently dropped, MATLAB then sits at the prompt and exits when stdin
-    # closes, so no window ever appears.
+    # The -r argument must be a single line. A multi-line string is silently
+    # dropped ("No MATLAB command specified for -r"), MATLAB then sits at the
+    # prompt and exits when stdin closes, so no window ever appears.
     #
-    # -batch rather than "-nodesktop -r" because -batch never reads stdin,
-    # which is what lets this run as a background job under the trap above.
-    # Graphics are unaffected: -batch is not -nodisplay, so the app window
-    # still opens normally.
-    run_matlab -batch "addpath(genpath('src')); addpath('app'); a = ScreeningApp; uiwait(a.UIFigure);"
+    # This must NOT be -batch. -batch sets batchStartupOptionUsed, which puts
+    # MATLAB in a non-interactive configuration where every blocking dialog is
+    # refused, so "Select fundus image" dies with "Creating dialog boxes that
+    # block execution is not supported". The GUI needs the interactive
+    # configuration; Ctrl+C is handled by the trap above, not by the mode.
+    run_matlab -nodesktop -nosplash -r "addpath(genpath('src')); addpath('app'); a = ScreeningApp; uiwait(a.UIFigure); exit(0);"
 }
 
 run_demo() {
