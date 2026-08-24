@@ -16,12 +16,29 @@ if ~isfile(imagePath)
     imagePath = fullfile(candidates(1).folder, candidates(1).name);
 end
 
-checkpointPath = fullfile(projectRoot, 'results', '20260822_030539', ...
-    'best_model.mat');
-calibrationPath = fullfile(projectRoot, 'results', '20260822_091625', ...
-    'temperature_fit.mat');
+% The demo must run the model the reported numbers describe.  These paths
+% were hardcoded to the 22 August checkpoint and its calibration, which
+% predate the operating point frozen on 23 August, so the smoke demo graded
+% with one model while every published figure came from another.  Read them
+% from config/default.json instead, which is where the freeze is recorded.
 configPath = fullfile(projectRoot, 'config', 'default.json');
-for requiredPath = {checkpointPath, calibrationPath, configPath}
+if ~isfile(configPath)
+    error('app:SmokeDependencyMissing', ...
+        'Smoke dependency does not exist: %s', configPath);
+end
+config = jsondecode(fileread(configPath));
+if ~isfield(config, 'operating_point') || ...
+        ~isfield(config.operating_point, 'model') || ...
+        ~isfield(config.operating_point, 'calibration')
+    error('app:SmokeDependencyMissing', ...
+        'config/default.json must record operating_point.model and .calibration.');
+end
+checkpointPath = fullfile(projectRoot, config.operating_point.model);
+calibrationPath = fullfile(projectRoot, config.operating_point.calibration);
+if isfolder(calibrationPath)
+    calibrationPath = fullfile(calibrationPath, 'temperature_fit.mat');
+end
+for requiredPath = {checkpointPath, calibrationPath}
     if ~isfile(requiredPath{1})
         error('app:SmokeDependencyMissing', ...
             'Smoke dependency does not exist: %s', requiredPath{1});

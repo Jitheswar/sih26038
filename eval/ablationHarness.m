@@ -264,6 +264,12 @@ features.candidateCount = nan(n, 1);
 features.ruleLevel = nan(n, 1);
 features.ruleReferable = false(n, 1);
 features.ruleUncertain = true(n, 1);
+% Tracked separately from ruleUncertain: uncertain is true whenever any
+% evidence field is unknown, which includes the seven that have no detector
+% in this build and are therefore unknown on every image.  Only a case-level
+% unknown says anything about this image, and it is that distinction the
+% decision policy acts on.  Mirrors app.runScreeningCase.
+features.ruleCaseUnknown = true(n, 1);
 features.ruleResults = cell(n, 1);
 features.qualityResults = cell(n, 1);
 features.spatiallyAgree = false(n, 1);
@@ -305,6 +311,7 @@ for index = 1:n
             features.ruleLevel(index) = ruleResult.level;
             features.ruleReferable(index) = ruleResult.referable;
             features.ruleUncertain(index) = ruleResult.uncertain;
+            features.ruleCaseUnknown(index) = ruleResult.caseUnknownEvidence;
             if needCNN
                 features.evidenceSupportsCNN(index) = localEvidenceSupportsCNN( ...
                     features.predictedLevel(index), detection, ruleResult);
@@ -395,12 +402,60 @@ for index = 1:n
         continue;
     end
 
+    if ~entry.lesionEvidence
+        % A4: deferral with the lesion channel switched off.  This is a
+        % reduced policy and must be composed here, like the others.
+        % grade.decisionPolicy requires rule evidence for auto-clear as a
+        % locked safety invariant, so handing it a configuration that has
+        % removed the evidence channel raises missing-rule-evidence on
+        % every image and escalates all of them.  That measures the
+        % contradiction between the flag and the invariant, not deferral.
+        % The disposition uses the CNN alone, exactly as the semantics at
+        % the top of this file state: clear below the auto-clear threshold,
+        % refer at or above the referral threshold, and defer the band
+        % between them, which is the whole of what deferral adds over A2.
+        [decision, reason] = localCnnOnlyThreeWay( ...
+            features.predictedLevel(index), ...
+            features.referableProbability(index), entry.config);
+        decisions.decision(index) = decision;
+        decisions.reason(index) = reason;
+        decisions.autonomous(index) = ~strcmp(decision, "escalate");
+        decisions.predictedReferable(index) = strcmp(decision, "refer");
+        continue;
+    end
+
     policyResult = grade.decisionPolicy( ...
         localDecisionInput(entry, features, index), entry.config);
     decisions.decision(index) = string(policyResult.decision);
     decisions.reason(index) = string(strjoin(policyResult.reasonCodes, ','));
     decisions.autonomous(index) = ~strcmp(policyResult.decision, 'escalate');
     decisions.predictedReferable(index) = strcmp(policyResult.decision, 'refer');
+end
+end
+
+function [decision, reason] = localCnnOnlyThreeWay(predictedLevel, ...
+        probability, config)
+%LOCALCNNONLYTHREEWAY The three-way disposition without the lesion channel.
+%   Used where the ablation switches lesion evidence off but leaves deferral
+%   on.  Deferral's contribution is the band between the two thresholds:
+%   below the auto-clear threshold the patient goes home, at or above the
+%   referral threshold they are referred, and in between a human decides.
+policy = config.decision_policy;
+if isfinite(predictedLevel) && predictedLevel == 4
+    % Every predicted Level 4 reaches a human whatever the confidence.  That
+    % is the declared mitigation for the neovascularisation data gap and it
+    % does not depend on the lesion evidence channel.
+    decision = "escalate";
+    reason = "cnn-level-4";
+elseif probability >= policy.referableThreshold
+    decision = "refer";
+    reason = "calibrated probability at or above the referral threshold";
+elseif probability < policy.autoClearThreshold
+    decision = "auto-clear";
+    reason = "calibrated probability below the auto-clear threshold";
+else
+    decision = "escalate";
+    reason = "calibrated probability in the deferral band";
 end
 end
 
@@ -444,7 +499,7 @@ if entry.agreementCheck
             'rawResolution', []), ...
         'lesionEvidenceMetadata', struct( ...
             'candidateEvidence', true, ...
-            'evidenceKnown', ~features.ruleUncertain(index), ...
+            'evidenceKnown', ~features.ruleCaseUnknown(index), ...
             'referable', features.ruleReferable(index)), ...
         'gradCamAndLesionEvidenceSpatiallyAgree', features.spatiallyAgree(index), ...
         'lesionEvidenceSupportsCNN', features.evidenceSupportsCNN(index));
@@ -599,30 +654,20 @@ fprintf('\nResults written to %s\n', resultsDirectory);
 end
 
 % -------------------------------------------------------------------- helpers
-% localICDREvidence, localSpatialAgreement, localEvidenceSupportsCNN and
-% localPostEnhancementQuality reproduce app.runScreeningCase exactly.
-% TestAblationHarness fails if they stop matching.
+% localSpatialAgreement and localPostEnhancementQuality reproduce
+% app.runScreeningCase exactly.  TestAblationHarness fails if they stop
+% matching.  Evidence construction and the evidence-support check are no
+% longer reproduced here: both callers delegate to grade.icdrEvidence-
+% FromDetection and grade.evidenceSupportsCNN, because two copies of the
+% evidence schema is precisely how this path drifts from the deployed one
+% while still passing its own tests.
 
 function evidence = localICDREvidence(config, detection)
 if isfield(config, 'app') && isstruct(config.app) && isfield(config.app, 'icdrEvidence')
     evidence = config.app.icdrEvidence;
     return;
 end
-candidateCount = double(detection.candidateCount);
-unknownCount = struct('value', [], 'known', false);
-unknownVector = struct('value', [], 'known', false);
-unknownLogical = struct('value', [], 'known', false);
-evidence = struct( ...
-    'microaneurysmCount', struct('value', candidateCount, 'known', true), ...
-    'haemorrhageCountPerQuadrant', unknownVector, ...
-    'hardExudateCount', unknownCount, ...
-    'softExudateCount', unknownCount, ...
-    'venousBeadingPerQuadrant', unknownLogical, ...
-    'irmaPerQuadrant', unknownLogical, ...
-    'neovascularisation', unknownLogical, ...
-    'vitreousOrPreretinalHaemorrhage', unknownLogical, ...
-    'evidenceSource', 'classical candidate evidence', ...
-    'clinicalValidationStatus', 'not clinically validated lesion segmentation');
+evidence = grade.icdrEvidenceFromDetection(detection);
 end
 
 function answer = localSpatialAgreement(gradCAMResult, detection)
@@ -648,11 +693,7 @@ answer = mean(heatmap(linear) >= 0.35) >= 0.25;
 end
 
 function answer = localEvidenceSupportsCNN(predictedLevel, detection, rule)
-if predictedLevel >= 2
-    answer = detection.candidateCount > 0 || rule.referable;
-else
-    answer = detection.candidateCount == 0 && ~rule.referable;
-end
+answer = grade.evidenceSupportsCNN(predictedLevel, detection, rule);
 end
 
 function value = localPostEnhancementQuality(qualityResult)

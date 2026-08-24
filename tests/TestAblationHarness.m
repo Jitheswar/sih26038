@@ -128,6 +128,43 @@ classdef TestAblationHarness < matlab.unittest.TestCase
                 'A1 handles every case autonomously by construction.');
         end
 
+        function deferralWithoutLesionEvidenceStillDecides(testCase)
+            % A4 switches the lesion channel off and leaves deferral on.
+            % Delegating that to grade.decisionPolicy raised
+            % missing-rule-evidence on every image and escalated all of
+            % them, so A4 measured the contradiction between a pipeline
+            % flag and a locked safety invariant rather than measuring
+            % deferral.  The reduced policy is composed in the harness and
+            % must be able to reach a disposition without the lesion
+            % channel.
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestAblationHarness.removeDirectory(resultsRoot)); %#ok<NASGU>
+
+            result = ablationHarness('Configs', {'ablation_A4.json'}, ...
+                'Split', 'validation', 'Limit', 8, 'ResultsRoot', resultsRoot);
+            decisions = result.metrics(1).decisions.decision;
+
+            testCase.verifyGreaterThan(result.metrics(1).coverage, 0, ...
+                'A4 must handle some case autonomously; zero coverage means the policy cannot act.');
+            testCase.verifyFalse(any(strcmp(decisions, "failed")), ...
+                'A4 must not fail cases for want of an evidence channel it switched off.');
+        end
+
+        function fullPipelineReachesMoreThanEscalation(testCase)
+            % The three-way decision must reach more than one outcome.  A5
+            % escalated all 550 validation cases because capability gaps
+            % were treated as per-case safety exceptions.
+            resultsRoot = tempname;
+            cleanup = onCleanup(@() TestAblationHarness.removeDirectory(resultsRoot)); %#ok<NASGU>
+
+            result = ablationHarness('Configs', {'ablation_A5.json'}, ...
+                'Split', 'validation', 'Limit', 8, 'ResultsRoot', resultsRoot);
+            decisions = result.metrics(1).decisions.decision;
+
+            testCase.verifyGreaterThan(result.metrics(1).coverage, 0, ...
+                'A5 escalating every case means the decision layer is disabled, not conservative.');
+        end
+
         function resultsDirectoryCarriesConfigAndTable(testCase)
             resultsRoot = tempname;
             cleanup = onCleanup(@() TestAblationHarness.removeDirectory(resultsRoot)); %#ok<NASGU>

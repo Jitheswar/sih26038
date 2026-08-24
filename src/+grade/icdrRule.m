@@ -11,6 +11,10 @@ evidence = validateICDREvidence(inputEvidence);
 
 unknownFields = localUnknownFields(evidence);
 hasUnknown = ~isempty(unknownFields);
+[capabilityGapFields, caseUnknownFields] = localPartitionUnknown(evidence, ...
+    unknownFields);
+hasCaseUnknown = ~isempty(caseUnknownFields);
+maxReachableLevel = localMaxReachableLevel(evidence);
 
 proliferativeCriteria = {};
 if evidence.neovascularisation.known && evidence.neovascularisation.value
@@ -71,8 +75,17 @@ else
 end
 
 referable = level >= 2;
-humanEscalation = hasUnknown || level == 4 || ...
-    localIsCandidateEvidence(evidence);
+
+% Escalation must be discriminative.  A condition that holds on every image
+% is a property of which detectors this build has, not a fact about this
+% patient, so it cannot function as a per-case safety control; treating it
+% as one silently disables the decision layer.  Capability gaps and the
+% provisional status of candidate evidence are therefore disclosed rather
+% than escalated.  Case-level unknowns - a field some detector owns but
+% could not determine on this image - do escalate, and so does Level 4,
+% which is the mitigation the design commits to for the neovascularisation
+% data gap.
+humanEscalation = hasCaseUnknown || level == 4;
 
 result = struct();
 result.icdrLevel = level;
@@ -80,12 +93,19 @@ result.level = level;
 result.referable = referable;
 result.firedCriterion = firedCriterion;
 result.evidenceSummary = localEvidenceSummary(evidence, unknownFields);
-result.uncertaintyWarning = localUncertaintyWarning(unknownFields);
+result.uncertaintyWarning = localUncertaintyWarning(capabilityGapFields, ...
+    caseUnknownFields);
 result.escalationRecommendation = localEscalationRecommendation( ...
-    humanEscalation, level, hasUnknown);
+    humanEscalation, level, hasCaseUnknown);
 result.humanEscalationRecommended = humanEscalation;
 result.uncertain = hasUnknown;
+result.caseUnknownEvidence = hasCaseUnknown;
 result.missingEvidenceFields = unknownFields;
+result.capabilityGapFields = capabilityGapFields;
+result.caseUnknownFields = caseUnknownFields;
+result.maxReachableLevel = maxReachableLevel;
+result.referableLevelReachable = maxReachableLevel >= 2;
+result.levelIsCapabilityCapped = maxReachableLevel < 4;
 result.evidenceSource = evidence.evidenceSource;
 result.clinicalValidationStatus = evidence.clinicalValidationStatus;
 result.ruleTrace = localRuleTrace(evidence, level, referable, ...
@@ -133,12 +153,6 @@ positive(8) = evidence.vitreousOrPreretinalHaemorrhage.known && ...
     evidence.vitreousOrPreretinalHaemorrhage.value;
 end
 
-function answer = localIsCandidateEvidence(evidence)
-source = lower(evidence.evidenceSource);
-status = lower(evidence.clinicalValidationStatus);
-answer = contains(source, 'candidate') || contains(status, 'not clinically');
-end
-
 function text = localEvidenceSummary(evidence, unknownFields)
 text = sprintf(['Evidence source: %s.\n', ...
     'Clinical validation status: %s. Candidate findings are not confirmed lesions.\n', ...
@@ -164,26 +178,37 @@ if ~isempty(unknownFields)
 end
 end
 
-function text = localUncertaintyWarning(unknownFields)
-if isempty(unknownFields)
+function text = localUncertaintyWarning(capabilityGapFields, caseUnknownFields)
+parts = {};
+if ~isempty(capabilityGapFields)
+    parts{end + 1} = sprintf(['Capability gap: no detector in this build ', ...
+        'produces %s, so these fields are unknown on every image. The rule ', ...
+        'engine cannot rise above the levels those fields define.'], ...
+        strjoin(capabilityGapFields, ', ')); %#ok<AGROW>
+end
+if ~isempty(caseUnknownFields)
+    parts{end + 1} = sprintf(['Uncertainty warning: evidence is unknown for ', ...
+        '%s on this image. Unknown evidence was not treated as zero and may ', ...
+        'conceal a more severe ICDR level.'], ...
+        strjoin(caseUnknownFields, ', ')); %#ok<AGROW>
+end
+if isempty(parts)
     text = 'No missing evidence detected; all required evidence fields were known.';
 else
-    text = sprintf(['Uncertainty warning: evidence is unknown for %s. ', ...
-        'Unknown evidence was not treated as zero and may conceal a more severe ICDR level.'], ...
-        strjoin(unknownFields, ', '));
+    text = strjoin(parts, ' ');
 end
 end
 
-function text = localEscalationRecommendation(humanEscalation, level, hasUnknown)
-if hasUnknown
-    text = ['Escalate to human clinical review because missing evidence could affect ', ...
-        'the safety of the screening result.'];
+function text = localEscalationRecommendation(humanEscalation, level, hasCaseUnknown)
+if hasCaseUnknown
+    text = ['Escalate to human clinical review because a detector that owns ', ...
+        'an evidence field could not determine it on this image, and the ', ...
+        'missing value could affect the safety of the screening result.'];
 elseif level == 4
     text = ['Escalate every Level 4 result to a human reviewer because ', ...
         'neovascularisation has no validated pixel-level ground truth in this project.'];
 elseif humanEscalation
-    text = ['Human confirmation is recommended because this result uses ', ...
-        'candidate evidence that is not clinically validated.'];
+    text = 'Human confirmation is recommended by the rule engine.';
 else
     text = 'No additional human escalation was triggered by the rule engine.';
 end
@@ -305,5 +330,43 @@ function text = localJoin(values, delimiter)
 text = values{1};
 for index = 2:numel(values)
     text = [text, delimiter, values{index}]; %#ok<AGROW>
+end
+end
+
+function [capabilityGapFields, caseUnknownFields] = ...
+        localPartitionUnknown(evidence, unknownFields)
+%LOCALPARTITIONUNKNOWN Split unknown fields by whether a detector owns them.
+coverage = evidence.evidenceFieldCoverage;
+capabilityGapFields = {};
+caseUnknownFields = {};
+for index = 1:numel(unknownFields)
+    fieldName = unknownFields{index};
+    if isfield(coverage, fieldName) && ~coverage.(fieldName)
+        capabilityGapFields{end + 1} = fieldName; %#ok<AGROW>
+    else
+        caseUnknownFields{end + 1} = fieldName; %#ok<AGROW>
+    end
+end
+end
+
+function level = localMaxReachableLevel(evidence)
+%LOCALMAXREACHABLELEVEL The highest ICDR level this evidence set can express.
+%   With only microaneurysm counts covered the rule can never return more
+%   than Level 1, so asking it to confirm referability is asking for the
+%   impossible.  Callers use this to tell "the rule disagrees" apart from
+%   "the rule cannot reach that far".
+coverage = evidence.evidenceFieldCoverage;
+covered = @(name) isfield(coverage, name) && coverage.(name);
+if covered('neovascularisation') || covered('vitreousOrPreretinalHaemorrhage')
+    level = 4;
+elseif covered('haemorrhageCountPerQuadrant') || ...
+        covered('venousBeadingPerQuadrant') || covered('irmaPerQuadrant')
+    level = 3;
+elseif covered('hardExudateCount') || covered('softExudateCount')
+    level = 2;
+elseif covered('microaneurysmCount')
+    level = 1;
+else
+    level = 0;
 end
 end

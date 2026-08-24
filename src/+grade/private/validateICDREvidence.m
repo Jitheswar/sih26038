@@ -61,6 +61,61 @@ evidence.evidenceSource = localTextField(inputEvidence, ...
     'evidenceSource', 'unspecified evidence source');
 evidence.clinicalValidationStatus = localTextField(inputEvidence, ...
     'clinicalValidationStatus', 'not clinically validated');
+evidence.evidenceFieldCoverage = localFieldCoverage(inputEvidence);
+end
+
+function names = localClinicalFieldNames()
+%LOCALCLINICALFIELDNAMES The eight fields the ICDR criteria are written over.
+names = { ...
+    'microaneurysmCount', ...
+    'haemorrhageCountPerQuadrant', ...
+    'hardExudateCount', ...
+    'softExudateCount', ...
+    'venousBeadingPerQuadrant', ...
+    'irmaPerQuadrant', ...
+    'neovascularisation', ...
+    'vitreousOrPreretinalHaemorrhage'};
+end
+
+function coverage = localFieldCoverage(inputEvidence)
+%LOCALFIELDCOVERAGE Which fields a detector in this build can produce.
+%   A field is "covered" when some configured detector is responsible for
+%   it, whether or not it succeeded on this image.  An uncovered field is a
+%   capability gap: no detector exists, so the field is unknown on every
+%   image and its unknown-ness says nothing about this particular case.
+%   Callers that do not declare coverage get every field covered, which
+%   preserves the original semantics where any unknown is case-level.
+names = localClinicalFieldNames();
+coverage = struct();
+for index = 1:numel(names)
+    coverage.(names{index}) = true;
+end
+declared = [];
+if isfield(inputEvidence, 'evidenceFieldCoverage')
+    declared = inputEvidence.evidenceFieldCoverage;
+elseif isfield(inputEvidence, 'evidence_field_coverage')
+    declared = inputEvidence.evidence_field_coverage;
+end
+if isempty(declared)
+    return;
+end
+if ~isstruct(declared) || ~isscalar(declared)
+    error('grade:InvalidEvidenceCoverage', ...
+        'evidenceFieldCoverage must be one scalar structure.');
+end
+for index = 1:numel(names)
+    fieldName = names{index};
+    if ~isfield(declared, fieldName)
+        continue;
+    end
+    value = declared.(fieldName);
+    if ~((islogical(value) || isnumeric(value)) && isscalar(value) && ...
+            isreal(value) && isfinite(value) && ismember(double(value), [0, 1]))
+        error('grade:InvalidEvidenceCoverage', ...
+            'evidenceFieldCoverage.%s must be a logical scalar.', fieldName);
+    end
+    coverage.(fieldName) = logical(value);
+end
 end
 
 function item = localCountItem(item, fieldName)

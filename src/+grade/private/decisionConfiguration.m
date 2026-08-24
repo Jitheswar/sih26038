@@ -39,6 +39,17 @@ configuration.escalateOnExplanationDisagreement = localRequiredLogical( ...
     'escalate_on_explanation_disagreement'}, ...
     'escalateOnExplanationDisagreement');
 
+% Not a safety invariant, and deliberately not required.  escalateOnUnknown-
+% Evidence above governs case-level unknowns, where a detector owns a field
+% and could not determine it; that stays locked on.  This flag governs
+% capability gaps, where no detector exists at all, so the field is unknown
+% on every image.  Escalating on those refuses every case and yields a
+% pipeline with zero autonomous coverage, which is a defensible policy but
+% must be chosen rather than arrived at by accident.
+configuration.escalateOnCapabilityGap = localOptionalLogical(policy, ...
+    {'escalateOnCapabilityGap', 'escalate_on_capability_gap'}, ...
+    'escalateOnCapabilityGap', false);
+
 if configuration.autoClearThreshold >= configuration.referableThreshold
     error('grade:InvalidDecisionConfiguration', ...
         'The auto-clear threshold must be below the referral threshold.');
@@ -63,6 +74,14 @@ if ~isnumeric(value) || ~isscalar(value) || ~isreal(value) || ...
         '%s must be a finite number between zero and one.', label);
 end
 value = double(value);
+end
+
+function value = localOptionalLogical(policy, names, label, defaultValue)
+if ~any(cellfun(@(name) isfield(policy, name), names))
+    value = defaultValue;
+    return;
+end
+value = localRequiredLogical(policy, names, label);
 end
 
 function value = localRequiredLogical(policy, names, label)

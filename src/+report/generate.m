@@ -292,10 +292,22 @@ end
 end
 
 function value = localAgreement(result)
-if isfield(result, 'agreementStatus')
-    value = char(result.agreementStatus);
-else
+%LOCALAGREEMENT The agreement verdict, with what it was able to check.
+%   A bare "concordant" reads as two independent channels corroborating each
+%   other.  While the ICDR rule engine is capability-capped below Level 2 it
+%   cannot corroborate referability at all, and the verdict rests on the
+%   lesion-evidence channel alone.  The clinician-facing report says which.
+if ~isfield(result, 'agreementStatus')
     value = 'not assessed';
+    return;
+end
+value = char(result.agreementStatus);
+if isfield(result, 'threeWayDecision') && ...
+        isstruct(result.threeWayDecision) && ...
+        isfield(result.threeWayDecision, 'agreementBasis') && ...
+        ~isempty(result.threeWayDecision.agreementBasis)
+    value = sprintf('%s (basis: %s)', value, ...
+        char(result.threeWayDecision.agreementBasis));
 end
 end
 

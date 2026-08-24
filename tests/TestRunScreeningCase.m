@@ -36,7 +36,22 @@ classdef TestRunScreeningCase < matlab.unittest.TestCase
             testCase.verifySubstring(strjoin(result.warnings, newline), ...
                 'provisional');
             testCase.verifyTrue(result.icdrRuleResult.uncertain);
-            testCase.verifyEqual(result.threeWayDecision.decision, 'escalate');
+            % Seven of the eight evidence fields have no detector in this
+            % build, so the rule engine is uncertain on every image.  That is
+            % a capability gap and it must not by itself route the case to a
+            % human.  This assertion used to pin 'escalate', which is how a
+            % pipeline that escalated all 550 validation cases kept a green
+            % test suite: the test encoded the defect as the expectation.
+            testCase.verifyFalse(result.icdrRuleResult.caseUnknownEvidence);
+            testCase.verifyFalse(result.icdrRuleResult.humanEscalationRecommended);
+            testCase.verifyNumElements( ...
+                result.icdrRuleResult.capabilityGapFields, 7);
+            testCase.verifyFalse(result.icdrRuleResult.referableLevelReachable);
+            % The limitation must still reach the clinician-facing output.
+            testCase.verifySubstring(result.threeWayDecision.explanation, ...
+                'capability-capped');
+            testCase.verifySubstring(strjoin(result.warnings, newline), ...
+                'Capability gap');
             testCase.verifySubstring(result.classProbabilitiesDescription, ...
                 'Raw softmax');
             testCase.verifySubstring(result.classProbabilitiesDescription, ...

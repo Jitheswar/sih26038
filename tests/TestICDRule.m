@@ -281,6 +281,75 @@ classdef TestICDRule < matlab.unittest.TestCase
             testCase.verifyError(@() grade.icdrRule(evidence), ...
                 'grade:InvalidEvidenceKnownStatus');
         end
+
+        function capabilityGapsDoNotRecommendEscalation(testCase)
+            % The defect this pins: with only microaneurysm detection built,
+            % seven evidence fields are unknown on every image.  Treating
+            % that as a per-case safety exception escalated all 550
+            % validation cases and left the decision layer with zero
+            % autonomous coverage.
+            result = grade.icdrRule( ...
+                TestICDRule.classicalCoverageEvidence(3));
+
+            testCase.verifyEqual(result.level, 1);
+            testCase.verifyFalse(result.humanEscalationRecommended);
+            testCase.verifyEmpty(result.caseUnknownFields);
+            testCase.verifyNumElements(result.capabilityGapFields, 7);
+            testCase.verifyTrue(result.uncertain);
+            testCase.verifyFalse(result.caseUnknownEvidence);
+        end
+
+        function capabilityGapCapsTheReachableLevel(testCase)
+            capped = grade.icdrRule(TestICDRule.classicalCoverageEvidence(0));
+            full = grade.icdrRule(TestICDRule.evidence());
+
+            testCase.verifyEqual(capped.maxReachableLevel, 1);
+            testCase.verifyFalse(capped.referableLevelReachable);
+            testCase.verifyEqual(full.maxReachableLevel, 4);
+            testCase.verifyTrue(full.referableLevelReachable);
+        end
+
+        function caseLevelUnknownStillRecommendsEscalation(testCase)
+            % A detector that owns a field and could not determine it on this
+            % image is a fact about this image, so it must still escalate.
+            evidence = TestICDRule.classicalCoverageEvidence(3);
+            evidence.evidenceFieldCoverage.haemorrhageCountPerQuadrant = true;
+
+            result = grade.icdrRule(evidence);
+
+            testCase.verifyTrue(result.humanEscalationRecommended);
+            testCase.verifyTrue(result.caseUnknownEvidence);
+            testCase.verifyTrue(ismember('haemorrhageCountPerQuadrant', ...
+                result.caseUnknownFields));
+            testCase.verifyNumElements(result.capabilityGapFields, 6);
+        end
+
+        function undeclaredCoverageTreatsEveryUnknownAsCaseLevel(testCase)
+            % Callers that do not declare coverage keep the original
+            % semantics, so this change cannot silently relax an existing
+            % caller that never opted in.
+            evidence = TestICDRule.evidence();
+            evidence.irmaPerQuadrant = TestICDRule.unknown();
+
+            result = grade.icdrRule(evidence);
+
+            testCase.verifyTrue(result.caseUnknownEvidence);
+            testCase.verifyTrue(result.humanEscalationRecommended);
+            testCase.verifyEmpty(result.capabilityGapFields);
+            testCase.verifyEqual(result.caseUnknownFields, {'irmaPerQuadrant'});
+        end
+
+        function levelFourStillEscalatesUnderCapabilityGaps(testCase)
+            % The declared mitigation for the neovascularisation data gap is
+            % escalating every Level 4, not escalating every case.
+            evidence = TestICDRule.evidence();
+            evidence.neovascularisation = TestICDRule.known(true);
+
+            result = grade.icdrRule(evidence);
+
+            testCase.verifyEqual(result.level, 4);
+            testCase.verifyTrue(result.humanEscalationRecommended);
+        end
     end
 
     methods (Static, Access = private)
@@ -303,6 +372,34 @@ classdef TestICDRule < matlab.unittest.TestCase
             evidence = rmfield(evidence, 'vitreousOrPreretinalHaemorrhage');
             evidence.vitreousHaemorrhage = TestICDRule.known(false);
             evidence.preretinalHaemorrhage = TestICDRule.known(false);
+        end
+
+        function evidence = classicalCoverageEvidence(candidateCount)
+            %CLASSICALCOVERAGEEVIDENCE What app.runScreeningCase actually builds.
+            %   Only classical microaneurysm candidate detection exists, so
+            %   that is the one covered field and the other seven are
+            %   capability gaps.
+            evidence = struct();
+            evidence.evidenceSource = 'classical candidate evidence';
+            evidence.clinicalValidationStatus = ...
+                'not clinically validated lesion segmentation';
+            evidence.microaneurysmCount = TestICDRule.known(candidateCount);
+            evidence.haemorrhageCountPerQuadrant = TestICDRule.unknown();
+            evidence.hardExudateCount = TestICDRule.unknown();
+            evidence.softExudateCount = TestICDRule.unknown();
+            evidence.venousBeadingPerQuadrant = TestICDRule.unknown();
+            evidence.irmaPerQuadrant = TestICDRule.unknown();
+            evidence.neovascularisation = TestICDRule.unknown();
+            evidence.vitreousOrPreretinalHaemorrhage = TestICDRule.unknown();
+            evidence.evidenceFieldCoverage = struct( ...
+                'microaneurysmCount', true, ...
+                'haemorrhageCountPerQuadrant', false, ...
+                'hardExudateCount', false, ...
+                'softExudateCount', false, ...
+                'venousBeadingPerQuadrant', false, ...
+                'irmaPerQuadrant', false, ...
+                'neovascularisation', false, ...
+                'vitreousOrPreretinalHaemorrhage', false);
         end
 
         function item = known(value)

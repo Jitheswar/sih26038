@@ -12,7 +12,15 @@ end
 
 configuration = decisionConfiguration(config);
 normalized = normalizeDecisionInput(input);
+
+% codes collects per-case safety exceptions, which force escalation.
+% disclosures collects build-level limitations, which are true of every
+% image and therefore cannot discriminate between cases.  Disclosures are
+% reported in reasonCodes and in the explanation exactly as before, but they
+% no longer force escalation unless decision_policy.escalateOnCapabilityGap
+% asks for the maximally conservative policy.
 codes = {};
+disclosures = {};
 
 quality = normalized.quality;
 if isempty(quality.class)
@@ -59,14 +67,26 @@ rule = normalized.rule;
 if ~rule.present || ~rule.levelKnown || ~rule.referableKnown
     codes{end + 1} = 'missing-rule-evidence'; %#ok<AGROW>
 end
-if rule.unknownEvidence
+if rule.caseUnknownEvidence
     codes{end + 1} = 'required-evidence-unknown'; %#ok<AGROW>
+elseif rule.unknownEvidence
+    disclosures{end + 1} = 'evidence-capability-gap'; %#ok<AGROW>
 end
 if rule.unknownNeovascularisation
-    codes{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
+    if localIsCapabilityGap(rule, {'neovascularisation', ...
+            'neovascularization', 'nv'})
+        % Per the declared data gap, no dataset in this project carries
+        % neovascularisation masks, so this is unknown on every image.  The
+        % committed mitigation is escalating every predicted Level 4, which
+        % alwaysEscalateLevel4 does below, not escalating every case.
+        disclosures{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
+    else
+        codes{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
+    end
 end
 
 agreementStatus = localAgreementStatus(normalized);
+agreementBasis = localAgreementBasis(normalized);
 if strcmp(agreementStatus, 'spatially inconsistent')
     codes{end + 1} = 'explanation-disagreement'; %#ok<AGROW>
 elseif strcmp(agreementStatus, 'CNN referable but evidence unsupported')
@@ -77,7 +97,7 @@ elseif strcmp(agreementStatus, 'insufficient evidence')
     codes{end + 1} = 'insufficient-explanation-evidence'; %#ok<AGROW>
 end
 if rule.candidateEvidence
-    codes{end + 1} = 'candidate-evidence-provisional'; %#ok<AGROW>
+    disclosures{end + 1} = 'candidate-evidence-provisional'; %#ok<AGROW>
 end
 if cnn.predictedLevelKnown && cnn.predictedLevel == 4
     codes{end + 1} = 'cnn-level-4'; %#ok<AGROW>
@@ -86,14 +106,29 @@ if rule.escalationRecommended
     codes{end + 1} = 'rule-engine-recommends-escalation'; %#ok<AGROW>
 end
 
+if configuration.escalateOnCapabilityGap
+    % The maximally conservative policy: refuse to decide anything while any
+    % evidence field lacks a detector.  This is what the pipeline did before
+    % the distinction existed, kept reachable from configuration so the
+    % ablation can measure both policies over one code path.
+    codes = [codes, disclosures];
+    disclosures = {};
+end
 mandatoryCodes = codes;
 if isempty(mandatoryCodes)
     if cnn.predictedLevel >= 2
+        % The rule engine confirms referability where it can reach Level 2;
+        % where a capability gap caps it below Level 2 it cannot confirm or
+        % deny, so requiring confirmation would require the impossible.  The
+        % under-detected safety check is carried by supportsCNN, which is
+        % still evaluated: a referable prediction with no lesion evidence
+        % behind it escalates rather than referring.
+        ruleDoesNotContradict = rule.referable || ~rule.referableLevelReachable;
         canRefer = cnn.calibratedProbability >= ...
             configuration.referableThreshold && ...
             normalized.explanation.supportKnown && ...
             normalized.explanation.supportsCNN && ...
-            strcmp(agreementStatus, 'concordant') && rule.referable;
+            strcmp(agreementStatus, 'concordant') && ruleDoesNotContradict;
         if canRefer
             decision = 'refer';
         else
@@ -105,7 +140,7 @@ if isempty(mandatoryCodes)
             configuration.autoClearThreshold && ...
             (~configuration.requireEvidenceForAutoClear || ...
             (rule.present && rule.referableKnown && ~rule.referable && ...
-            ~rule.unknownEvidence)) && ...
+            ~rule.caseUnknownEvidence)) && ...
             strcmp(agreementStatus, 'concordant') && ...
             (~cnn.uncertaintyKnown || strcmp(uncertaintyStatus, 'low'));
         if canAutoClear
@@ -122,6 +157,10 @@ end
 if isempty(mandatoryCodes) && strcmp(agreementStatus, 'concordant')
     codes = [{'concordant'}, codes];
 end
+
+% Disclosures are reported alongside the per-case codes so nothing the old
+% policy surfaced is now hidden; they simply did not drive the decision.
+codes = [codes, disclosures];
 
 % The invariant is checked after all conditions so future edits cannot add
 % a fourth primary outcome accidentally.
@@ -159,12 +198,12 @@ reasonText = localReasonText(codes);
 decisionReason = sprintf('%s: %s.', localDecisionText(decision), reasonText);
 explanation = sprintf(['Primary decision: %s. Quality: %s. Calibrated ', ...
     'referable probability: %s. CNN ICDR level: %s. ICDR rule level: %s. ', ...
-    'Agreement: %s. Uncertainty: %s. Evidence quality: %s. ', ...
+    'Agreement: %s (basis: %s). Uncertainty: %s. Evidence quality: %s. ', ...
     'Reason codes: %s.'], ...
     decision, localTextOrUnknown(quality.class), ...
     localProbabilityText(cnn), localLevelText(cnn.predictedLevel), ...
-    localLevelText(rule.level), agreementStatus, uncertaintyStatus, ...
-    evidenceQualityStatus, strjoin(codes, ', '));
+    localLevelText(rule.level), agreementStatus, agreementBasis, ...
+    uncertaintyStatus, evidenceQualityStatus, strjoin(codes, ', '));
 if rule.candidateEvidence
     warning = rule.candidateWarning;
     if isempty(warning)
@@ -184,6 +223,7 @@ result.calibratedProbability = cnn.calibratedProbability;
 result.cnnPredictedLevel = cnn.predictedLevel;
 result.icdrRuleLevel = rule.level;
 result.agreementStatus = agreementStatus;
+result.agreementBasis = agreementBasis;
 result.uncertaintyStatus = uncertaintyStatus;
 result.evidenceQualityStatus = evidenceQualityStatus;
 result.candidateEvidenceStatus = candidateEvidenceStatus;
@@ -212,15 +252,37 @@ end
 if ~rule.present || ~rule.levelKnown || ~rule.referableKnown || ...
         ~explanation.spatialKnown || ~explanation.supportKnown || ...
         ~explanation.gradCamAvailable || ~explanation.evidenceKnown || ...
-        rule.unknownEvidence
+        rule.caseUnknownEvidence
     status = 'insufficient evidence';
     return;
 end
-if cnn.predictedLevel ~= rule.level
-    status = 'insufficient evidence';
-    return;
+if rule.referableLevelReachable
+    % Both channels can express the whole scale, so compare them directly.
+    if cnn.predictedLevel ~= rule.level
+        status = 'insufficient evidence';
+        return;
+    end
 end
+% When a capability gap caps the rule engine below Level 2 no comparison
+% against its level is meaningful.  Its "not referable" is silence, not a
+% denial: it lacks every field the Level 2+ criteria are written over, so it
+% would contradict the classifier on every diseased image and agree with it
+% on every healthy one for reasons that have nothing to do with the image.
+% The under-detected and over-detected checks above are then the whole
+% agreement test, and they run off the lesion-evidence channel, which does
+% exist.  agreementBasis records which of the two situations produced this
+% verdict so a concordant result is never read as more corroboration than it is.
 status = 'concordant';
+end
+
+function basis = localAgreementBasis(normalized)
+%LOCALAGREEMENTBASIS What the agreement verdict was actually able to check.
+if normalized.rule.referableLevelReachable
+    basis = 'CNN and ICDR rule engine compared on the full scale';
+else
+    basis = ['lesion evidence channel only; the ICDR rule engine is ', ...
+        'capability-capped below Level 2 and cannot corroborate referability'];
+end
 end
 
 function answer = localEvidenceReferable(normalized)
@@ -228,6 +290,18 @@ if normalized.explanation.evidenceReferableKnown
     answer = normalized.explanation.evidenceReferable;
 else
     answer = normalized.rule.referableKnown && normalized.rule.referable;
+end
+end
+
+function answer = localIsCapabilityGap(rule, names)
+%LOCALISCAPABILITYGAP Is this field unknown because no detector produces it?
+answer = false;
+for index = 1:numel(rule.capabilityGapFields)
+    value = lower(rule.capabilityGapFields{index});
+    if any(strcmp(value, names)) || contains(value, 'neovascular')
+        answer = true;
+        return;
+    end
 end
 end
 

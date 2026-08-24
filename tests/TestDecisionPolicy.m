@@ -205,6 +205,92 @@ classdef TestDecisionPolicy < matlab.unittest.TestCase
             testCase.verifyTrue(ismember(result.decision, ...
                 {'auto-clear', 'refer', 'escalate'}));
         end
+
+        function capabilityGapDoesNotForceEscalation(testCase)
+            % The defect this pins: four reason codes fired on every image
+            % while the only evidence source was classical microaneurysm
+            % detection, and they were evaluated before any threshold was
+            % read.  Measured over the full validation split the pipeline
+            % escalated 550 of 550 cases, so the three-way decision only ever
+            % went one way and the ablation could not compare A4 or A5 at any
+            % coverage.
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyDecision(result, 'auto-clear');
+            testCase.verifyEqual(result.agreementStatus, 'concordant');
+        end
+
+        function capabilityCappedRuleDoesNotBlockReferral(testCase)
+            % A rule engine capped below Level 2 cannot confirm referability,
+            % so requiring its confirmation required the impossible and no
+            % case could ever be referred.  Its silence is not a denial.
+            input = TestDecisionPolicy.input(2, 0.80);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(1);
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyDecision(result, 'refer');
+            testCase.verifyTrue(result.referralSlipRequired);
+            testCase.verifySubstring(result.agreementBasis, 'capability-capped');
+        end
+
+        function disclosuresAreReportedWithoutDecidingTheCase(testCase)
+            % Nothing the previous policy surfaced may become invisible; the
+            % build limitations must still reach the clinician-facing report.
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyDecision(result, 'auto-clear');
+            testCase.verifyTrue(ismember('evidence-capability-gap', ...
+                result.reasonCodes));
+            testCase.verifyTrue(ismember('unknown-neovascularisation-status', ...
+                result.reasonCodes));
+            testCase.verifyTrue(ismember('candidate-evidence-provisional', ...
+                result.reasonCodes));
+            testCase.verifySubstring(result.explanation, ...
+                'evidence-capability-gap');
+        end
+
+        function caseLevelUnknownEvidenceStillEscalates(testCase)
+            % The safety rule that matters is unchanged: a field a detector
+            % owns but could not determine on this image still escalates.
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            input.ruleEngine.caseUnknownEvidence = true;
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyDecision(result, 'escalate');
+            testCase.verifyTrue(ismember('required-evidence-unknown', ...
+                result.reasonCodes));
+        end
+
+        function escalateOnCapabilityGapRestoresConservativePolicy(testCase)
+            % The refuse-everything policy stays reachable from configuration
+            % so the ablation can measure both over one code path, per the
+            % rule that pipeline stages switch from config and never by
+            % editing code.
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            config = TestDecisionPolicy.config();
+            config.decisionPolicy.escalateOnCapabilityGap = true;
+
+            result = grade.decisionPolicy(input, config);
+
+            testCase.verifyDecision(result, 'escalate');
+            testCase.verifyTrue(ismember('evidence-capability-gap', ...
+                result.reasonCodes));
+        end
+
+        function levelFourEscalatesEvenWithCapabilityGaps(testCase)
+            input = TestDecisionPolicy.input(4, 0.99);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(1);
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyDecision(result, 'escalate');
+            testCase.verifyTrue(ismember('cnn-level-4', result.reasonCodes));
+        end
     end
 
     methods (Static, Access = private)
@@ -227,6 +313,33 @@ classdef TestDecisionPolicy < matlab.unittest.TestCase
                 'candidateEvidence', false, 'referable', level >= 2), ...
                 'gradCamAndLesionEvidenceSpatiallyAgree', true, ...
                 'lesionEvidenceSupportsCNN', true);
+        end
+
+        function rule = cappedRule(level)
+            %CAPPEDRULE The rule result app.runScreeningCase actually produces.
+            %   Seven of the eight evidence fields have no detector in this
+            %   build, so they are capability gaps rather than case-level
+            %   unknowns and the engine cannot reach Level 2.
+            gaps = {'haemorrhageCountPerQuadrant', 'hardExudateCount', ...
+                'softExudateCount', 'venousBeadingPerQuadrant', ...
+                'irmaPerQuadrant', 'neovascularisation', ...
+                'vitreousOrPreretinalHaemorrhage'};
+            rule = struct( ...
+                'icdrLevel', level, ...
+                'level', level, ...
+                'referable', false, ...
+                'escalationRecommendation', 'No escalation recommended.', ...
+                'humanEscalationRecommended', false, ...
+                'uncertain', true, ...
+                'caseUnknownEvidence', false, ...
+                'missingEvidenceFields', {gaps}, ...
+                'capabilityGapFields', {gaps}, ...
+                'caseUnknownFields', {{}}, ...
+                'maxReachableLevel', 1, ...
+                'referableLevelReachable', false, ...
+                'evidenceSource', 'classical candidate evidence', ...
+                'clinicalValidationStatus', ...
+                'not clinically validated lesion segmentation');
         end
 
         function rule = rule(level, referable)

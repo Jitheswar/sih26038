@@ -71,6 +71,7 @@
     "requireEvidenceForAutoClear": true,
     "alwaysEscalateLevel4": true,
     "escalateOnUnknownEvidence": true,
-    "escalateOnExplanationDisagreement": true
+    "escalateOnExplanationDisagreement": true,
+    "escalateOnCapabilityGap": false
   }
 }
