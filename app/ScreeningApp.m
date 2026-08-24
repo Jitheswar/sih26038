@@ -121,8 +121,11 @@ classdef ScreeningApp < handle
             app.EscalationValue = uilabel(controls, 'Text', 'Escalation reason: -', ...
                 'WordWrap', 'on');
             app.EscalationValue.Layout.Row = 17;
-            app.EvidenceWarningValue = uilabel(controls, ...
-                'Text', 'Evidence-quality warning: candidate evidence is provisional.', ...
+            % Blank until a case has actually been graded.  Showing a standing
+            % red evidence warning on an idle app reads as a fault the operator
+            % should act on, and trains them to ignore the one case where it
+            % carries information.
+            app.EvidenceWarningValue = uilabel(controls, 'Text', '', ...
                 'WordWrap', 'on', 'FontColor', [0.55, 0.18, 0.05]);
             app.EvidenceWarningValue.Layout.Row = 18;
 
@@ -147,6 +150,18 @@ classdef ScreeningApp < handle
             app.CandidateAxes.Layout.Column = 2;
             title(app.CandidateAxes, 'Classical candidate overlay');
 
+            % An empty image panel showing a 0-1 numeric grid looks like a
+            % broken plot rather than an empty slot.  imshow restores the
+            % rulers itself when a case is displayed.
+            for emptyAxes = [app.OriginalAxes, app.ProcessedAxes, ...
+                    app.GradCAMAxes, app.CandidateAxes]
+                emptyAxes.XTick = [];
+                emptyAxes.YTick = [];
+                emptyAxes.Box = 'off';
+                emptyAxes.XColor = 'none';
+                emptyAxes.YColor = 'none';
+            end
+
             evidencePanel = uipanel(workspace, 'Title', 'Evidence and status');
             evidencePanel.Layout.Row = 3;
             evidencePanel.Layout.Column = [1, 2];
@@ -170,10 +185,16 @@ classdef ScreeningApp < handle
 
         function applyDefaults(app, varargin)
             configPath = fullfile(app.ProjectRoot, 'config', 'default.json');
-            checkpointPath = fullfile(app.ProjectRoot, 'results', ...
-                '20260822_030539', 'best_model.mat');
-            calibrationPath = fullfile(app.ProjectRoot, 'results', ...
-                '20260822_091625', 'temperature_fit.mat');
+            % The UI must grade with the model the reported numbers describe.
+            % These defaults were hardcoded to the 22 August checkpoint and its
+            % calibration, both of which predate the operating point frozen on
+            % 23 August, so the demo a judge runs graded with one model while
+            % every published figure came from another.  eval/appSmoke.m had
+            % the same defect and was fixed; the UI was missed.  Read the
+            % frozen paths from config/default.json, which is where the freeze
+            % is recorded.
+            [checkpointPath, calibrationPath] = ...
+                app.frozenOperatingPoint(configPath);
             if mod(numel(varargin), 2) ~= 0
                 error('app:InvalidUIOptions', 'UI options must be name-value pairs.');
             end
@@ -194,6 +215,35 @@ classdef ScreeningApp < handle
             app.ConfigPathField.Value = configPath;
             app.ModelPathField.Value = checkpointPath;
             app.CalibrationPathField.Value = calibrationPath;
+        end
+
+        function [checkpointPath, calibrationPath] = ...
+                frozenOperatingPoint(app, configPath)
+            %FROZENOPERATINGPOINT Model and calibration recorded by the freeze.
+            %   Falls back to empty paths rather than to a stale checkpoint: a
+            %   blank field is an obvious prompt to pick a model, whereas a
+            %   silently wrong one grades against numbers nobody published.
+            checkpointPath = '';
+            calibrationPath = '';
+            if ~isfile(configPath)
+                return;
+            end
+            config = jsondecode(fileread(configPath));
+            if ~isfield(config, 'operating_point')
+                return;
+            end
+            operatingPoint = config.operating_point;
+            if isfield(operatingPoint, 'model')
+                checkpointPath = fullfile(app.ProjectRoot, operatingPoint.model);
+            end
+            if isfield(operatingPoint, 'calibration')
+                calibrationPath = fullfile(app.ProjectRoot, ...
+                    operatingPoint.calibration);
+                if isfolder(calibrationPath)
+                    calibrationPath = fullfile(calibrationPath, ...
+                        'temperature_fit.mat');
+                end
+            end
         end
 
         function selectImage(app)
