@@ -43,6 +43,62 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 
 MATLAB_BIN="${MATLAB_BIN:-$(command -v matlab || true)}"
 
+# --------------------------------------------------------- process control
+# MATLAB installs its own SIGINT handler. Under "-nodesktop -r" a Ctrl+C is
+# taken to mean "interrupt the current MATLAB statement", so it breaks out of
+# uiwait, drops to the >> prompt, and leaves both the MATLAB process and the
+# app window alive while this script is still blocked waiting on it. The
+# terminal never comes back and the demo cannot be stopped.
+#
+# Running MATLAB as a background job and terminating it from a trap is what
+# makes Ctrl+C actually stop the demo. Descendants are signalled too: MATLAB
+# spawns helper and renderer processes that outlive a bare kill of the parent.
+MATLAB_PID=""
+
+kill_tree() {
+    local pid=$1 signal=$2 child
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$child" "$signal"
+    done
+    kill -"$signal" "$pid" 2>/dev/null || true
+}
+
+stop_matlab() {
+    [[ -z "$MATLAB_PID" ]] && return 0
+    kill -0 "$MATLAB_PID" 2>/dev/null || { MATLAB_PID=""; return 0; }
+    kill_tree "$MATLAB_PID" TERM
+    local waited=0
+    while kill -0 "$MATLAB_PID" 2>/dev/null && (( waited < 40 )); do
+        sleep 0.25
+        waited=$(( waited + 1 ))
+    done
+    if kill -0 "$MATLAB_PID" 2>/dev/null; then
+        kill_tree "$MATLAB_PID" KILL
+    fi
+    MATLAB_PID=""
+}
+
+on_interrupt() {
+    printf '\n'
+    warn "interrupted - stopping MATLAB"
+    stop_matlab
+    exit 130
+}
+
+trap on_interrupt INT TERM HUP
+trap stop_matlab EXIT
+
+run_matlab() {
+    # stdin is closed deliberately. A backgrounded job would otherwise inherit
+    # the terminal and compete with this script for it.
+    "$MATLAB_BIN" "$@" < /dev/null &
+    MATLAB_PID=$!
+    local status=0
+    wait "$MATLAB_PID" || status=$?
+    MATLAB_PID=""
+    return $status
+}
+
 # ------------------------------------------------------------------ preflight
 preflight() {
     local failed=0
@@ -114,12 +170,17 @@ preflight() {
 launch_gui() {
     preflight || { bad "preflight failed - fix the above before demoing"; exit 1; }
     head2 "Launching the screening GUI"
-    say "${DIM}Close the app window to return to this shell.${RESET}"
+    say "${DIM}Close the app window, or press Ctrl+C here, to return to this shell.${RESET}"
     say ""
-    # The -r argument must be a single line. A multi-line string is silently
-    # dropped ("No MATLAB command specified for -r"), MATLAB then sits at the
-    # prompt and exits when stdin closes, so no window ever appears.
-    "$MATLAB_BIN" -nodesktop -nosplash -r "addpath(genpath('src')); addpath('app'); a = ScreeningApp; uiwait(a.UIFigure); exit(0);"
+    # The -batch argument must be a single line. A multi-line string is
+    # silently dropped, MATLAB then sits at the prompt and exits when stdin
+    # closes, so no window ever appears.
+    #
+    # -batch rather than "-nodesktop -r" because -batch never reads stdin,
+    # which is what lets this run as a background job under the trap above.
+    # Graphics are unaffected: -batch is not -nodisplay, so the app window
+    # still opens normally.
+    run_matlab -batch "addpath(genpath('src')); addpath('app'); a = ScreeningApp; uiwait(a.UIFigure);"
 }
 
 run_demo() {
@@ -128,7 +189,7 @@ run_demo() {
     say "${DIM}Runs quality gate, grading, Grad-CAM, lesion evidence, decision policy,${RESET}"
     say "${DIM}then exports the annotated report.${RESET}"
     say ""
-    "$MATLAB_BIN" -batch "addpath(genpath('src')); addpath('eval'); appSmoke()"
+    run_matlab -batch "addpath(genpath('src')); addpath('eval'); appSmoke()"
 }
 
 show_numbers() {
@@ -158,7 +219,7 @@ run_tests() {
     head2 "Full test suite"
     say "${DIM}This takes about 8 minutes.${RESET}"
     say ""
-    "$MATLAB_BIN" -batch "assertSuccess(runtests('tests','IncludeSubfolders',true))"
+    run_matlab -batch "assertSuccess(runtests('tests','IncludeSubfolders',true))"
 }
 
 usage() {

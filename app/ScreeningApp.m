@@ -128,6 +128,10 @@ classdef ScreeningApp < handle
             % Enter runs the case.  During a live demo the operator's hands
             % are on the image, not hunting for the button.
             app.UIFigure.KeyPressFcn = @(~, event) app.handleKey(event);
+            % Explicit rather than relying on the default closereq, so the
+            % window manager's close request has an unambiguous handler and
+            % uiwait in the launcher is released.
+            app.UIFigure.CloseRequestFcn = @(~, ~) delete(app.UIFigure);
             try
                 app.UIFigure.WindowState = 'maximized';
             catch
