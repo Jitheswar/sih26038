@@ -42,4 +42,9 @@ qualityResult.recaptureAdvice = advice;
 qualityResult.adviceDetails = adviceDetails;
 qualityResult.classifierDiagnostics = classifierDiagnostics;
 qualityResult.isEnhanced = isEnhanced;
+% common.preprocess publishes this outcome under both names, and
+% grade.decisionPolicy reads enhancementApplied. Emitting only isEnhanced
+% here left enhancementKnown false for every image, so the policy raised
+% missing-quality-input on gradable captures.
+qualityResult.enhancementApplied = isEnhanced;
 end

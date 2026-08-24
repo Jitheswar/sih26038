@@ -24,6 +24,28 @@ classdef TestSealedDataProtection < matlab.unittest.TestCase
                 'Messidor-2 grade CSV is missing from data/sealed/messidor2_grades/.');
         end
 
+        function testExternalValidationRefusesWithoutConfirmation(testCase)
+            % eval/externalValidation is the one function permitted to read
+            % data/sealed. It must never run by accident: the default call
+            % has to fail, or a stray invocation spends the one-shot set.
+            projectRoot = TestSealedDataProtection.projectRoot();
+            addpath(fullfile(projectRoot, 'eval'));
+            testCase.verifyError(@() externalValidation(), ...
+                'eval:SealNotConfirmed');
+            testCase.verifyError(@() externalValidation('ConfirmUnseal', false), ...
+                'eval:SealNotConfirmed');
+        end
+
+        function testExternalValidationRequiresANamedOperator(testCase)
+            % §10.4 names one key holder. An unseal with nobody's name on it
+            % is not an auditable unseal.
+            projectRoot = TestSealedDataProtection.projectRoot();
+            addpath(fullfile(projectRoot, 'eval'));
+            testCase.verifyError( ...
+                @() externalValidation('ConfirmUnseal', true), ...
+                'eval:MissingOperator');
+        end
+
         function testRunScreeningCaseRejectsSealedImagePath(testCase)
             sealedImage = fullfile(TestSealedDataProtection.projectRoot(), ...
                 'data', 'sealed', 'messidor2_grades', 'messidor_data.csv');

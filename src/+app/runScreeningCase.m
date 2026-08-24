@@ -353,16 +353,22 @@ end
 end
 
 function answer = localSpatialAgreement(gradCAMResult, detection)
+%LOCALSPATIALAGREEMENT Do the candidates sit where the model is looking?
+%   The 0.35 cut is a fraction of peak attention, so it must be applied to
+%   the normalized map.  resizedHeatmap is the unnormalized Grad-CAM
+%   response, whose scale is arbitrary and in practice tiny: peaks of 1e-4
+%   to 0.28 are typical, so a 0.35 cut on it never fired and every case
+%   raised explanation-disagreement.
 answer = false;
-if ~isfield(gradCAMResult, 'resizedHeatmap') || ...
-        isempty(gradCAMResult.resizedHeatmap)
+if ~isfield(gradCAMResult, 'normalizedHeatmap') || ...
+        isempty(gradCAMResult.normalizedHeatmap)
     return;
 end
 if detection.candidateCount == 0
     answer = true;
     return;
 end
-heatmap = double(gradCAMResult.resizedHeatmap);
+heatmap = double(gradCAMResult.normalizedHeatmap);
 coordinates = detection.candidateCoordinates;
 valid = coordinates(:, 1) >= 1 & coordinates(:, 1) <= size(heatmap, 2) & ...
     coordinates(:, 2) >= 1 & coordinates(:, 2) <= size(heatmap, 1);

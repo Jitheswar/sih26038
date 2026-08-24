@@ -141,6 +141,12 @@ hr{border:none; border-top:.5px solid var(--rule); margin:5mm 0}
 <tr><td>Change, 23 Aug 2026, §11.2 step 1</td><td><strong>Sweep on calibrated, not raw, probabilities.</strong> The protocol did not say which. <code>app.runScreeningCase</code> computes <code>calibratedReferableProbability</code> from temperature-scaled logits and passes that to <code>grade.decisionPolicy</code>, so a threshold swept on raw softmax would be applied at inference to a differently-scaled quantity. Recorded before the freeze date, not after.</td></tr>
 <tr><td>Change, 23 Aug 2026, §11.2 / §9 decision policy</td><td><strong><code>decision_policy.autoClearThreshold</code> raised 0.20 → 0.40 so the deployed policy realises the frozen operating point.</strong> §11.2 defines a binary endpoint, but <code>grade.decisionPolicy</code> is three-way and branches on the argmax before consulting any threshold. Measured on validation, the old 0.20 setting gave screening sensitivity 0.9910 (221/223) with specificity 0.8563, 95% CI lower bound <strong>0.8141</strong> — failing the §11.2 specificity target on the interval. At 0.40 the deployed policy reproduces the frozen point exactly: sensitivity 0.9821, specificity 0.9174, both intervals clear. Side effect: human review load falls from 48.7% to 44.7% of cases, which <strong>changes the C5 SimEvents deferral assumption and means the §9 sweeps should be re-run</strong> before their numbers are quoted alongside this operating point. Recorded before the freeze date, not after.</td></tr>
 <tr><td>Change, 23 Aug 2026, §11.2 step 2</td><td><strong>Select on the confidence-interval lower bound, not the point estimate.</strong> The original rule — sensitivity ≥ 0.90, then maximise specificity — is satisfied at the boundary, so it selects the operating point where sensitivity only just reaches target and the interval straddles it. Measured on this model it returns threshold 0.620: sensitivity 0.9148 with 95% CI lower bound <strong>0.8708</strong>, which fails the §11.2 target that §11.1 requires be reported as an interval. The rule as written could therefore certify an operating point that its own reporting policy rejects. The amended rule returns 0.400, sensitivity 0.9821 with CI lower bound 0.9548. Specificity is the slack side of this trade: its target is 0.85 and the frozen point delivers 0.9174, so buying sensitivity margin with specificity is the correct direction for a screening tool per §3, where a false negative is catastrophic and a false positive is recoverable. Recorded before the freeze date, not after.</td></tr>
+<tr><td>Correction, 24 Aug 2026, §0.3 / §9 C5 deferral assumption</td><td><strong>The 48.7% → 44.7% human-review figures in the row above are withdrawn.</strong> They are not reproducible and cannot be correct. In <code>grade.decisionPolicy</code> every escalation code is collected into <code>mandatoryCodes</code> <em>before</em> any threshold is read, and a non-empty <code>mandatoryCodes</code> forces <code>escalate</code>; the thresholds are consulted only inside the <code>isempty(mandatoryCodes)</code> branch. <code>rule.candidateEvidence</code> is true whenever <code>evidenceSource</code> contains &quot;candidate&quot;, which it always does while the only evidence source is classical microaneurysm candidate detection. Human review load is therefore invariant to <code>autoClearThreshold</code>. Measured over the full validation split with <code>eval/ablationHarness.m</code> (configuration A5, n=550), autonomous coverage is <strong>0.0000 (0 of 550)</strong>: the integrated pipeline escalates every case. Nothing in the repository computes 48.7% or 44.7%. The C5 SimEvents deferral assumption inherits this and must be re-derived before any §9 sweep number is quoted alongside this operating point. Evidence: <code>results/20260824_033628_ablation_A1_A5</code>. <span class="tag v">Verified</span></td></tr>
+<tr><td>Clarification, 24 Aug 2026, §11.2</td><td><strong>What the frozen sensitivity and specificity describe.</strong> The frozen figures (validation 0.9821 / 0.9174; internal test 0.9600 / 0.9167) are measured by thresholding temperature-calibrated P(ICDR ≥ 2) at 0.400. They characterise the calibrated classifier at the frozen threshold and remain valid as such. They do <em>not</em> describe the autonomous behaviour of <code>grade.decisionPolicy</code>, which escalates every case. The phrase &quot;the deployed policy reproduces the frozen point exactly&quot; in the row above should be read as &quot;the calibrated classifier at this threshold reproduces the frozen point&quot;. The endpoint numbers themselves are unchanged by this clarification and by the three fixes recorded below. <span class="tag v">Verified</span></td></tr>
+<tr><td>Change, 24 Aug 2026, §5 quality gate</td><td><strong><code>quality.assess</code> now emits <code>enhancementApplied</code> alongside <code>isEnhanced</code>.</strong> <code>common.preprocess</code> already published both names and <code>grade.decisionPolicy</code> reads <code>enhancementApplied</code>, so the omission left <code>enhancementKnown</code> false for every image and raised <code>missing-quality-input</code> on gradable captures. No effect on the frozen endpoint, which does not consult the decision policy. <span class="tag v">Verified</span></td></tr>
+<tr><td>Change, 24 Aug 2026, §8.2 Grad-CAM geometry</td><td><strong>The Grad-CAM map is now placed back into the original frame using the recorded field-of-view crop.</strong> <code>common.preprocess</code> crops to the field of view before resizing, and on APTOS that crop keeps as little as 60% of the frame starting well inside it (measured: bounding boxes such as [327 85 1377 1379] on a 1536×2048 image). <code>explain.gradcam</code> previously resized the map straight to the original dimensions, stretching a map computed on the cropped region across the whole picture, so the clinician-facing overlay pointed at the wrong location and the spatial agreement check compared non-corresponding coordinates. Pixels outside the field of view are now zero because the model never saw them. Pinned by <code>TestGradCAM.heatmapIsConfinedToTheFieldOfViewCrop</code>. <span class="tag v">Verified</span></td></tr>
+<tr><td>Change, 24 Aug 2026, §8.6 agreement check</td><td><strong>The spatial agreement check now thresholds the normalized Grad-CAM map, not the unnormalized one.</strong> <code>localSpatialAgreement</code> in <code>app.runScreeningCase</code> compared <code>resizedHeatmap</code> against a 0.35 cut. That cut is a fraction of peak attention and is only meaningful on a normalized map; raw Grad-CAM response is arbitrarily scaled and in practice tiny, with measured peaks of 1e-4 to 0.28. The fraction of candidates clearing 0.35 on the raw map was 0.000 on every image tested, so <code>explanation-disagreement</code> fired unconditionally. On the normalized map the check discriminates. No effect on the frozen endpoint. <span class="tag v">Verified</span></td></tr>
+<tr><td>Added, 24 Aug 2026, §11.3 and §11.6 tooling</td><td><strong>The §11.6 ablation study and the missing §11.3 metrics are now implemented and run.</strong> <code>eval/ablationHarness.m</code> runs A1–A5 as five configurations over one evaluation path at the frozen threshold; <code>TestAblationHarness.agreesWithDeployedPipelineForA5</code> pins it against <code>app.runScreeningCase</code> case for case, so drift between the two invalidates the table loudly rather than silently. The five <code>config/ablation_*.json</code> files were stale (ordinal head, batch size 12, unfrozen threshold, <code>autoClearThreshold</code> 0.20) and have been regenerated against the frozen operating point. Quadratic weighted kappa, ROC/AUC, precision–recall/AP, PPV/NPV, and the risk–coverage curve are added under <code>eval/metrics/</code> with hand-computed unit tests. <code>eval/explanationQuality.m</code> implements the §11.7 pointing game, deletion/insertion AUC, and the Adebayo cascading-randomisation sanity check against IDRiD masks. <code>eval/externalValidation.m</code> implements the §10.4 unseal protocol and refuses to run without explicit confirmation and a named operator. <span class="tag v">Verified</span></td></tr>
 </tbody>
 </table>
 
@@ -1135,6 +1141,26 @@ AGREEMENT      Rule path and CNN agree
 </tbody>
 </table>
 
+
+<h3>§11.3 measured results &mdash; validation split, 24 August 2026</h3>
+<p>Produced by <code>eval/fullMetricReport.m</code> (n = 550, frozen threshold 0.400, temperature 2.1414). Results: <code>results/20260824_035401_full_metrics_validation</code>. The referable figures reproduce the frozen §11.2 values exactly, which is the check that the three pipeline fixes recorded in §0.3 did not disturb the endpoint.</p>
+<table class="kv">
+<tbody>
+<tr><td>Referable sensitivity / specificity</td><td>0.9821 (95% Wilson CI 0.9548&ndash;0.9930, 219/223) &nbsp;/&nbsp; 0.9174 (0.8825&ndash;0.9426, 300/327)</td></tr>
+<tr><td>PPV / NPV</td><td>0.8902 / 0.9868 at the observed prevalence 0.4055. Both move sharply with prevalence; a community camp at 10% prevalence would show a much lower PPV from the same model.</td></tr>
+<tr><td>ROC AUC</td><td>0.9847</td></tr>
+<tr><td>Average precision</td><td>0.9734 (baseline 0.4055)</td></tr>
+<tr><td>Quadratic weighted kappa</td><td><strong>0.9015</strong> &mdash; the APTOS competition metric, against a single rater's grade</td></tr>
+<tr><td>Per-class recall (ICDR 0&ndash;4)</td><td>0.9668, 0.6964, 0.7933, 0.4483, 0.6591 &mdash; no class at zero</td></tr>
+<tr><td>Calibration</td><td>ECE 0.0771 &rarr; 0.0404; Brier 0.2470 &rarr; 0.2378; NLL 0.6164 &rarr; 0.4904</td></tr>
+<tr><td>Risk&ndash;coverage</td><td>AURC 0.0222 against a base risk of 0.0564, ranking by distance from the threshold</td></tr>
+<tr><td>By quality tier</td><td>gradable n=511, sens 0.9806 / spec 0.9115; borderline n=39, sens 1.0000 / spec 1.0000; <strong>ungradable n=0</strong></td></tr>
+<tr><td>Latency</td><td>median 0.715 s, mean 1.799 s, p95 13.157 s per case on an RTX 3050 6GB laptop GPU, whole path including quality gate and preprocessing</td></tr>
+<tr><td>Model size</td><td>83.8 MB checkpoint, 23,544,837 learnable parameters</td></tr>
+<tr><td>By dataset / camera</td><td>Not applicable: the development splits are APTOS only. That comparison is what the sealed external set exists for (§11.4).</td></tr>
+</tbody>
+</table>
+
 <h2>11.4 Reporting internal versus external</h2>
 
 <p>Every headline result appears twice, side by side, in this shape:</p>
@@ -1192,6 +1218,27 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0">Configurations A1&ndash;A5 must be selectable from a config file, not by editing code. If ablation requires commenting out lines, it will be done once, badly, the night before. Build the pipeline with each stage independently switchable from day one (§13.3).</p>
 </div>
 
+
+<h3>§11.6 measured results &mdash; 24 August 2026</h3>
+<p>Run with <code>eval/ablationHarness.m</code> over the full validation split (n = 550) at the frozen operating point: threshold 0.400 on temperature-calibrated P(ICDR&nbsp;&ge;&nbsp;2), temperature 2.1414, checkpoint <code>results/20260823_184930/epoch_08.mat</code>. The five configurations are five config files over one evaluation path. Results: <code>results/20260824_033628_ablation_A1_A5</code>.</p>
+<p>The study runs on validation, not on the internal test split. §11.1 touches the test split once and it has been touched for the frozen internal result; re-running it for a design comparison would quietly convert it into a development split.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Sensitivity</strong></td><td><strong>Specificity</strong></td><td><strong>Coverage</strong></td><td><strong>Accuracy on autonomous subset</strong></td><td><strong>Referable missed autonomously</strong></td></tr>
+<tr><td>A1 &mdash; CNN only</td><td>0.9821 (0.9548&ndash;0.9930)</td><td>0.9174 (0.8825&ndash;0.9426)</td><td>1.000</td><td>0.9436</td><td>4</td></tr>
+<tr><td>A2 &mdash; CNN + quality gate</td><td>0.9821 (0.9548&ndash;0.9930)</td><td>0.9174 (0.8825&ndash;0.9426)</td><td>1.000</td><td>0.9436</td><td>4</td></tr>
+<tr><td>A3 &mdash; lesion + ICDR rules, no CNN</td><td>0.0000 (0.0000&ndash;0.0169)</td><td>1.0000 (0.9884&ndash;1.0000)</td><td>1.000</td><td>0.5945</td><td>223</td></tr>
+<tr><td>A4 &mdash; CNN + quality gate + deferral</td><td>&mdash;</td><td>&mdash;</td><td><strong>0.000</strong></td><td>undefined</td><td>0</td></tr>
+<tr><td>A5 &mdash; full pipeline</td><td>&mdash;</td><td>&mdash;</td><td><strong>0.000</strong></td><td>undefined</td><td>0</td></tr>
+</tbody>
+</table>
+<div class="box warn">
+<h4>What the table actually says</h4>
+<p><strong>A5 does not dominate. It makes no autonomous decisions at all.</strong> A4 and A5 escalate all 550 cases, so their sensitivity and specificity over autonomously handled cases are undefined rather than zero, and the risk&ndash;coverage comparison §11.6 calls for cannot be drawn: there is no coverage to compare at. The cause is recorded in §0.3 &mdash; four escalation codes fire on every image while the only evidence source is classical microaneurysm candidate detection, and they are evaluated before any threshold is read.</p>
+<p><strong>A1 and A2 are identical to four decimal places</strong> because the validation split contains no image the quality gate classifies as ungradable (511 gradable, 39 borderline, 0 ungradable). The gate's contribution on this split is therefore not measurable, which is a statement about the split, not evidence that the gate is useless.</p>
+<p style="margin-bottom:0"><strong>A3 reaches 0.0000 sensitivity by construction, not by accident.</strong> The ICDR rule engine receives one known field, microaneurysm count. Every criterion for Level 2 and above requires haemorrhages, exudates, venous beading or IRMA, all of which are unknown, so the rule can only ever return Level 0 or Level 1 and can never declare a case referable. The fully interpretable baseline is an evidence channel, not a grader, and this is the §6.6 data gap expressed as a metric.</p>
+</div>
+
 <h2>11.7 Explanation quality metrics &mdash; the differentiator</h2>
 
 <p>Almost every team will show heatmaps. Very few will <strong>measure</strong> them. IDRiD's pixel-level lesion masks make quantitative evaluation possible, and this is the main reason IDRiD is in our pipeline at all.</p>
@@ -1206,6 +1253,25 @@ AGREEMENT      Rule path and CNN agree
 <tr><td><strong>Clinician usefulness rating</strong></td><td>From §12. Discharges R6.3 &mdash; "Grad-CAM outputs rated as clinically useful" &mdash; which cannot be discharged by any automated metric.</td></tr>
 </tbody>
 </table>
+
+
+<h3>§11.7 measured results &mdash; 24 August 2026</h3>
+<p>Measured with <code>eval/explanationQuality.m</code> on the IDRiD segmentation testing set (n = 27 images carrying pixel lesion masks), against the frozen checkpoint. Top-5% most salient pixels; lesion pixels occupy 0.0659 of the frame on average, which is why a random control is reported beside every hit rate. Results: <code>results/20260824_042408_explanation_quality</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Pointing game</strong></td><td><strong>mean hit rate</strong></td><td><strong>lift over random</strong></td></tr>
+<tr><td>Grad-CAM</td><td>0.0863</td><td>1.32&times;</td></tr>
+<tr><td>Lesion-evidence channel (classical candidates)</td><td>0.0633</td><td>0.96&times;</td></tr>
+<tr><td>Random control</td><td>0.0656</td><td>1.00&times;</td></tr>
+<tr><td><strong>Faithfulness (Grad-CAM)</strong></td><td colspan="2">Deletion AUC 0.3253 (lower better), insertion AUC 0.8135 (higher better), separation +0.4881</td></tr>
+<tr><td><strong>Sanity check</strong></td><td colspan="2">Mean Spearman against the trained map falls to &minus;0.204 at 25% cascading randomisation and stays near zero thereafter. Grad-CAM passes: it is not invariant to the model parameters.</td></tr>
+</tbody>
+</table>
+<div class="box warn">
+<h4>Read these two results together</h4>
+<p>Grad-CAM is <strong>faithful to this model</strong> and <strong>weakly aligned with clinical ground truth</strong>. The deletion/insertion separation of +0.4881 and the randomisation collapse both say the map genuinely reflects what the network used. The pointing-game lift of 1.32&times; says that what the network used overlaps only slightly with where the graders drew lesions. Those are not in tension; §11.7 predicts exactly this split, and §8.3 predicts the cause: the final convolutional map is 14&times;14, which cannot localise a microaneurysm however faithful it is.</p>
+<p style="margin-bottom:0">The harder finding is the middle row. The classical lesion-evidence channel scores <strong>at chance</strong> (0.96&times;). As a localiser of graded lesions it currently carries no information, which bears directly on the §11.6 A3 result, where the same channel reaches 0.0000 sensitivity because it can only ever measure microaneurysm count and so can never satisfy an ICDR criterion above Level 1.</p>
+</div>
 
 <h1>12. Clinical Reader Study Protocol</h1>
 

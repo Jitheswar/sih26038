@@ -29,7 +29,13 @@ The 21 percent field result described in the design document is external context
 
 Inference time is a placeholder until the actual screening pipeline is benchmarked on target hardware.
 Model sensitivity and specificity are placeholders until the evaluation harness produces a frozen operating point.
-Deferral rate is a placeholder until the decision policy risk-coverage curve is measured.
+Deferral rate has now been measured, and the configured value is deliberately not the measured one.
+
+Measured over the full validation split on 24 August 2026 with `eval/ablationHarness.m` configuration A5 at the frozen operating point, autonomous coverage is 0 of 550 cases.
+Every case escalates to human review, so the measured deferral rate is `1.00`, recorded as `measuredDeferralRate` in the district config.
+`grade.decisionPolicy` raises `required-evidence-unknown`, `unknown-neovascularisation-status`, `candidate-evidence-provisional` and `rule-engine-recommends-escalation` on every image while the only evidence source is classical microaneurysm candidate detection, and those codes force escalation before any threshold is consulted.
+The configured `deferralRate` of `0.10` is retained as a scenario value describing a decision policy that can act autonomously.
+The current pipeline is not that policy, so any sweep run at `0.10` models a hypothetical improved system and must be labelled that way whenever its numbers are quoted.
 Grader service time is a placeholder until the reader study reports service time.
 Capture time, quality-gate time, image size, bandwidth, connectivity availability, retry interval, PHC count, prevalence, camp multiplier, and the turnaround target are scenario assumptions.
 

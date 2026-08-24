@@ -8,6 +8,10 @@ function result = gradcam(varargin)
 %   The checkpoint-first form is canonical.  IMAGE-first is also accepted:
 %   RESULT = explain.gradcam(IMAGE, CHECKPOINT, TARGETCLASS)
 %
+%   CHECKPOINT may also be an already-loaded checkpoint structure carrying
+%   net and config, the same form grade.infer accepts.  A sweep over a whole
+%   split loads the 84 MB file once instead of once per image.
+%
 %   Name-value options:
 %     ResultsRoot  Root directory for the dated explanation result (default
 %                  is the repository results directory).
@@ -15,6 +19,12 @@ function result = gradcam(varargin)
 %     EarlierLayer Valid earlier convolutional layer.  By default the
 %                  nearest earlier layer from a finer-resolution ResNet
 %                  stage is selected from the loaded graph.
+%     WriteArtifacts  Write the dated directory, the PNG overlay and report,
+%                  and explanation.mat (default true).  Set false for bulk
+%                  sweeps that consume the maps from the returned struct:
+%                  each persisted explanation is 60-120 MB and rendering the
+%                  report is most of the per-image cost.  The returned maps
+%                  are identical either way; only persistence is skipped.
 %
 %   The model probability in RESULT is the raw softmax probability.  It is
 %   explicitly not a calibrated confidence because temperature scaling is a
@@ -29,10 +39,16 @@ end
 
 [checkpointFile, imageInput, targetClass, options] = ...
     localParseInputs(varargin{:});
-checkpointFile = localRequireCheckpoint(checkpointFile);
-localRejectSealedPath(checkpointFile, 'checkpoint');
-
-checkpoint = localLoadCheckpoint(checkpointFile);
+if isstruct(checkpointFile)
+    % A checkpoint already in memory. Bulk callers load the 84 MB file once
+    % rather than once per image; grade.infer accepts the same form.
+    checkpoint = checkpointFile;
+    checkpointFile = localCheckpointSource(checkpoint);
+else
+    checkpointFile = localRequireCheckpoint(checkpointFile);
+    localRejectSealedPath(checkpointFile, 'checkpoint');
+    checkpoint = localLoadCheckpoint(checkpointFile);
+end
 net = checkpoint.net;
 config = checkpoint.config;
 
@@ -70,20 +86,25 @@ earlierMap = localGradCAM(net, processedImage, targetIndex, ...
 originalRows = size(originalImage, 1);
 originalColumns = size(originalImage, 2);
 final = localMapResult(finalMap, [originalRows, originalColumns], ...
-    selection.finalLayerName);
+    selection.finalLayerName, preprocessingMetadata);
 earlier = localMapResult(earlierMap, [originalRows, originalColumns], ...
-    selection.earlierLayerName);
+    selection.earlierLayerName, preprocessingMetadata);
 
 originalRgb = localDisplayImage(originalImage);
 overlay = localMakeOverlay(originalRgb, final.normalizedHeatmap);
 
-resultsRoot = options.resultsRoot;
-if isempty(resultsRoot)
-    resultsRoot = fullfile(localProjectRoot(), 'results');
+if options.writeArtifacts
+    resultsRoot = options.resultsRoot;
+    if isempty(resultsRoot)
+        resultsRoot = fullfile(localProjectRoot(), 'results');
+    end
+    resultsDirectory = localCreateDatedDirectory(resultsRoot);
+    configPath = fullfile(resultsDirectory, 'config.json');
+    localWriteText(configPath, jsonencode(config));
+else
+    resultsDirectory = '';
+    configPath = '';
 end
-resultsDirectory = localCreateDatedDirectory(resultsRoot);
-configPath = fullfile(resultsDirectory, 'config.json');
-localWriteText(configPath, jsonencode(config));
 
 result = struct();
 result.status = "completed";
@@ -130,6 +151,20 @@ result.clinicalLimitation = ...
 result.resultsDirectory = string(resultsDirectory);
 result.configPath = string(configPath);
 
+if ~options.writeArtifacts
+    % Bulk callers such as eval/ablationHarness need only the maps in the
+    % returned struct. Each persisted explanation is 60-120 MB of
+    % full-resolution maps plus two PNG exports, and rendering them is most
+    % of the per-image cost, so a sweep over a whole split neither wants
+    % them nor has room for them.
+    result.overlayPath = string.empty;
+    result.reportPath = string.empty;
+    result.reportTextPath = string.empty;
+    result.matPath = string.empty;
+    result.artifactsWritten = false;
+    return;
+end
+
 overlayPath = fullfile(resultsDirectory, 'gradcam_overlay.png');
 reportPath = fullfile(resultsDirectory, 'gradcam_report.png');
 reportTextPath = fullfile(resultsDirectory, 'gradcam_report.txt');
@@ -141,6 +176,7 @@ result.overlayPath = string(overlayPath);
 result.reportPath = string(reportPath);
 result.reportTextPath = string(reportTextPath);
 result.matPath = string(fullfile(resultsDirectory, 'explanation.mat'));
+result.artifactsWritten = true;
 % The returned result keeps every map for interactive use.  Persist one copy
 % of the final maps at top level and the earlier raw map, rather than storing
 % duplicate full-resolution maps inside both layer structs.
@@ -158,7 +194,13 @@ end
 
 function [checkpointFile, imageInput, targetClass, options] = ...
         localParseInputs(varargin)
-if localIsText(varargin{1})
+if localIsLoadedCheckpoint(varargin{1})
+    checkpointFile = varargin{1};
+    imageInput = varargin{2};
+elseif localIsLoadedCheckpoint(varargin{2})
+    imageInput = varargin{1};
+    checkpointFile = varargin{2};
+elseif localIsText(varargin{1})
     checkpointFile = char(varargin{1});
     imageInput = varargin{2};
 elseif localIsText(varargin{2})
@@ -170,7 +212,8 @@ else
 end
 
 targetClass = localTargetClass(varargin{3});
-options = struct('resultsRoot', '', 'finalLayer', '', 'earlierLayer', '');
+options = struct('resultsRoot', '', 'finalLayer', '', 'earlierLayer', '', ...
+    'writeArtifacts', true);
 if numel(varargin) > 3
     if mod(numel(varargin) - 3, 2) ~= 0
         error('explain:InvalidOptions', ...
@@ -202,6 +245,12 @@ if numel(varargin) > 3
                         'EarlierLayer must be a layer name.');
                 end
                 options.earlierLayer = char(value);
+            case 'writeartifacts'
+                if ~((islogical(value) || isnumeric(value)) && isscalar(value))
+                    error('explain:InvalidOptions', ...
+                        'WriteArtifacts must be a logical scalar.');
+                end
+                options.writeArtifacts = logical(value);
             otherwise
                 error('explain:InvalidOptions', 'Unknown option: %s.', name);
         end
@@ -239,6 +288,19 @@ if ~isfile(checkpointFile)
         'Checkpoint does not exist: %s', checkpointFile);
 end
 checkpointFile = char(java.io.File(checkpointFile).getCanonicalPath());
+end
+
+function result = localIsLoadedCheckpoint(value)
+result = isstruct(value) && isscalar(value) && ...
+    isfield(value, 'net') && isfield(value, 'config');
+end
+
+function source = localCheckpointSource(checkpoint)
+if isfield(checkpoint, 'checkpointPath')
+    source = char(string(checkpoint.checkpointPath));
+else
+    source = 'in-memory checkpoint';
+end
 end
 
 function checkpoint = localLoadCheckpoint(checkpointFile)
@@ -302,8 +364,21 @@ if ndims(scoreMap) ~= 2 || isempty(scoreMap) || any(~isfinite(scoreMap(:)))
 end
 end
 
-function layerResult = localMapResult(rawHeatmap, originalSize, layerName)
-resizedHeatmap = imresize(rawHeatmap, originalSize, 'bicubic');
+function layerResult = localMapResult(rawHeatmap, originalSize, layerName, ...
+        preprocessingMetadata)
+%LOCALMAPRESULT Return the map in the original image's coordinate frame.
+%   common.preprocess crops to the field of view before resizing to the
+%   model input, and that crop is both scaled and offset: on APTOS it can
+%   keep as little as 60% of the frame starting well inside it.  Resizing
+%   the map straight to the original dimensions therefore stretches a map
+%   the model computed on the cropped region across the whole picture, so
+%   the overlay points a clinician at the wrong place and the spatial
+%   agreement check in app.runScreeningCase compares coordinates that do
+%   not correspond.  Scaling to the crop and writing it back at the crop
+%   offset puts the map where the model actually looked.  Pixels outside
+%   the field of view are zero because the model never saw them.
+resizedHeatmap = localPlaceInOriginalFrame(rawHeatmap, originalSize, ...
+    preprocessingMetadata);
 if any(~isfinite(resizedHeatmap(:)))
     error('explain:InvalidHeatmap', ...
         'The resized Grad-CAM map for layer %s is non-finite.', layerName);
@@ -319,6 +394,52 @@ layerResult.rawHeatmapHeight = size(rawHeatmap, 1);
 layerResult.rawHeatmapWidth = size(rawHeatmap, 2);
 layerResult.rawHeatmapResolution = sprintf('%dx%d', ...
     layerResult.rawHeatmapHeight, layerResult.rawHeatmapWidth);
+end
+
+function placed = localPlaceInOriginalFrame(rawHeatmap, originalSize, ...
+        preprocessingMetadata)
+boundingBox = localFovBoundingBox(preprocessingMetadata);
+if isempty(boundingBox)
+    placed = imresize(rawHeatmap, originalSize, 'bicubic');
+    return;
+end
+
+columnStart = max(1, round(boundingBox(1)));
+rowStart = max(1, round(boundingBox(2)));
+columnEnd = min(originalSize(2), columnStart + round(boundingBox(3)) - 1);
+rowEnd = min(originalSize(1), rowStart + round(boundingBox(4)) - 1);
+cropSize = [rowEnd - rowStart + 1, columnEnd - columnStart + 1];
+if any(cropSize < 1)
+    placed = imresize(rawHeatmap, originalSize, 'bicubic');
+    return;
+end
+
+placed = zeros(originalSize, 'like', imresize(rawHeatmap, [1, 1], 'bicubic'));
+placed(rowStart:rowEnd, columnStart:columnEnd) = ...
+    imresize(rawHeatmap, cropSize, 'bicubic');
+end
+
+function boundingBox = localFovBoundingBox(preprocessingMetadata)
+boundingBox = [];
+if ~isstruct(preprocessingMetadata) || ~isscalar(preprocessingMetadata)
+    return;
+end
+if ~isfield(preprocessingMetadata, 'fovApplied') || ...
+        ~preprocessingMetadata.fovApplied
+    return;
+end
+if ~isfield(preprocessingMetadata, 'fovMode') || ...
+        ~strcmp(preprocessingMetadata.fovMode, 'crop')
+    % Mask mode leaves the frame intact, so a plain resize is already right.
+    return;
+end
+if ~isfield(preprocessingMetadata, 'fovBoundingBox')
+    return;
+end
+candidate = preprocessingMetadata.fovBoundingBox;
+if numel(candidate) == 4 && all(isfinite(candidate)) && all(candidate(3:4) > 0)
+    boundingBox = candidate;
+end
 end
 
 function normalized = localNormalize(map)

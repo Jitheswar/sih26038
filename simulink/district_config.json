@@ -9,7 +9,7 @@
   "qualityGateTimeSeconds": 2,
   "qualityRejectionRate": 0.21,
   "maximumRecaptureAttempts": 2,
-  "inferenceTimeSeconds": 0.5,
+  "inferenceTimeSeconds": 0.715,
   "imageSizeMegabytes": 8,
   "bandwidthMegabitsPerSecond": 10,
   "connectivityAvailability": 0.7,
@@ -67,8 +67,8 @@
       "source": "Project policy"
     },
     "inferenceTimeSeconds": {
-      "assumed": true,
-      "source": "Placeholder until the actual screening pipeline is benchmarked"
+      "assumed": false,
+      "source": "Measured 24 Aug 2026 with eval/fullMetricReport.m over the validation split (n=550) on an RTX 3050 6GB laptop GPU: median 0.715 s, mean 1.799 s, p95 13.157 s per case. The median is used because the mean is pulled up by the largest APTOS captures. Covers the whole per-case path a deployment runs, quality gate and preprocessing included, not the forward pass alone. Results: results/20260824_035401_full_metrics_validation. Target-hardware figures will differ; this is a laptop-class GPU."
     },
     "imageSizeMegabytes": {
       "assumed": true,
@@ -104,7 +104,7 @@
     },
     "deferralRate": {
       "assumed": true,
-      "source": "Retained at 0.10 as a conservative planning value. Probability-gate escalation measured at 0.066 (internal test) and 0.076 (validation); those are LOWER bounds because grade.decisionPolicy also escalates on evidence, agreement and rule-engine conditions not simulable from probabilities alone. Full-pipeline measurement still outstanding."
+      "source": "SCENARIO VALUE, NOT THE MEASURED ONE. Retained at 0.10 as a planning figure for a decision policy that can act autonomously. The current pipeline cannot: measured over the full validation split with eval/ablationHarness.m (configuration A5, n=550, results/20260824_033628_ablation_A1_A5), autonomous coverage is 0.000 and every case escalates, so the measured deferral rate is 1.00 (see measuredDeferralRate). grade.decisionPolicy raises required-evidence-unknown, unknown-neovascularisation-status, candidate-evidence-provisional and rule-engine-recommends-escalation on every image while the only evidence source is classical microaneurysm candidate detection, and those codes force escalation before any threshold is read. Any sweep run at 0.10 therefore models a hypothetical improved policy, not the system as it stands, and must be labelled that way when quoted."
     },
     "turnaroundTargetHours": {
       "assumed": true,
@@ -121,6 +121,11 @@
     "connectivityCycleSeconds": {
       "assumed": true,
       "source": "Placeholder daily connectivity cycle"
+    },
+    "measuredDeferralRate": {
+      "assumed": false,
+      "source": "Measured 24 Aug 2026 over the validation split (n=550) with eval/ablationHarness.m configuration A5 at the frozen operating point. Autonomous coverage 0 of 550."
     }
-  }
+  },
+  "measuredDeferralRate": 1.0
 }

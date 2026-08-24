@@ -1,4 +1,12 @@
 {
+  "ablation": {
+    "id": "A4",
+    "configuration": "CNN + quality gate + deferral",
+    "establishes": "Isolates the contribution of uncertainty-based escalation.",
+    "uses_cnn": true,
+    "source": "docs/SIH26038_design.html \u00a711.6",
+    "note": "Inherits preprocessing, grading, data and operating_point from config/default.json so every ablation runs the frozen model at the frozen threshold. Only the pipeline block and the decision composition differ."
+  },
   "pipeline": {
     "quality_gate": true,
     "enhancement": true,
@@ -6,18 +14,63 @@
     "agreement_check": false,
     "deferral": true
   },
+  "preprocessing": {
+    "output_type": "single",
+    "channel_mean": [
+      0,
+      0,
+      0
+    ],
+    "channel_std": [
+      0.00392156862745098,
+      0.00392156862745098,
+      0.00392156862745098
+    ]
+  },
   "grading": {
     "backbone": "resnet50",
     "input_size": 448,
-    "head": "ordinal",
-    "batch_size": 12,
-    "seed": 42
+    "head": "softmax",
+    "num_classes": 5,
+    "batch_size": 16,
+    "seed": 42,
+    "dropout": 0.5
   },
-  "operating_point": { "referable_threshold": null, "frozen_on": null },
+  "augmentation": {
+    "rotation": true,
+    "flips": true,
+    "scale_jitter": [
+      0.85,
+      1.0
+    ],
+    "brightness_shift": 10,
+    "contrast_gain": [
+      0.9,
+      1.1
+    ]
+  },
+  "class_balancing": {
+    "method": "inverse_frequency",
+    "oversampling": true
+  },
+  "data": {
+    "dataset": "APTOS"
+  },
+  "operating_point": {
+    "referable_threshold": 0.4,
+    "frozen_on": "2026-08-23",
+    "applies_to": "decision_policy.autoClearThreshold",
+    "applies_to_note": "autoClearThreshold is the only gate that can send a patient home, so it alone governs screening sensitivity. referableThreshold splits refer vs escalate and does not affect sensitivity.",
+    "temperature": 2.1414,
+    "model": "results/20260823_184930/epoch_08.mat",
+    "calibration": "results/20260823_204608",
+    "validation_sensitivity": 0.9821,
+    "validation_specificity": 0.9174
+  },
   "decision_policy": {
-    "referableThreshold": 0.70,
-    "autoClearThreshold": 0.20,
-    "uncertaintyThreshold": 0.50,
+    "referableThreshold": 0.7,
+    "autoClearThreshold": 0.4,
+    "uncertaintyThreshold": 0.5,
     "requireEvidenceForAutoClear": true,
     "alwaysEscalateLevel4": true,
     "escalateOnUnknownEvidence": true,
