@@ -1,0 +1,4 @@
+image_id,split,relative_path,manual_path,mask_path,vessel_fraction
+"DRIVE_22","validation","data/raw/training/images/22_training.tif","data/raw/training/1st_manual/22_manual1.gif","data/raw/training/mask/22_training_mask.gif",0.130882004163629
+"DRIVE_32","validation","data/raw/training/images/32_training.tif","data/raw/training/1st_manual/32_manual1.gif","data/raw/training/mask/32_training_mask.gif",0.119834269862721
+"DRIVE_35","validation","data/raw/training/images/35_training.tif","data/raw/training/1st_manual/35_manual1.gif","data/raw/training/mask/35_training_mask.gif",0.125686372701475

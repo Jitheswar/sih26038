@@ -1,0 +1,15 @@
+image_id,split,relative_path,manual_path,mask_path,vessel_fraction
+"DRIVE_21","train","data/raw/training/images/21_training.tif","data/raw/training/1st_manual/21_manual1.gif","data/raw/training/mask/21_training_mask.gif",0.109264184397163
+"DRIVE_23","train","data/raw/training/images/23_training.tif","data/raw/training/1st_manual/23_manual1.gif","data/raw/training/mask/23_training_mask.gif",0.0951587951986748
+"DRIVE_24","train","data/raw/training/images/24_training.tif","data/raw/training/1st_manual/24_manual1.gif","data/raw/training/mask/24_training_mask.gif",0.167811317109158
+"DRIVE_27","train","data/raw/training/images/27_training.tif","data/raw/training/1st_manual/27_manual1.gif","data/raw/training/mask/27_training_mask.gif",0.127601766260216
+"DRIVE_28","train","data/raw/training/images/28_training.tif","data/raw/training/1st_manual/28_manual1.gif","data/raw/training/mask/28_training_mask.gif",0.141685765439213
+"DRIVE_29","train","data/raw/training/images/29_training.tif","data/raw/training/1st_manual/29_manual1.gif","data/raw/training/mask/29_training_mask.gif",0.12202772437519
+"DRIVE_30","train","data/raw/training/images/30_training.tif","data/raw/training/1st_manual/30_manual1.gif","data/raw/training/mask/30_training_mask.gif",0.11386567748692
+"DRIVE_31","train","data/raw/training/images/31_training.tif","data/raw/training/1st_manual/31_manual1.gif","data/raw/training/mask/31_training_mask.gif",0.0873821371008472
+"DRIVE_34","train","data/raw/training/images/34_training.tif","data/raw/training/1st_manual/34_manual1.gif","data/raw/training/mask/34_training_mask.gif",0.142521033627319
+"DRIVE_36","train","data/raw/training/images/36_training.tif","data/raw/training/1st_manual/36_manual1.gif","data/raw/training/mask/36_training_mask.gif",0.157928324025051
+"DRIVE_37","train","data/raw/training/images/37_training.tif","data/raw/training/1st_manual/37_manual1.gif","data/raw/training/mask/37_training_mask.gif",0.126948843678748
+"DRIVE_38","train","data/raw/training/images/38_training.tif","data/raw/training/1st_manual/38_manual1.gif","data/raw/training/mask/38_training_mask.gif",0.125879659098946
+"DRIVE_39","train","data/raw/training/images/39_training.tif","data/raw/training/1st_manual/39_manual1.gif","data/raw/training/mask/39_training_mask.gif",0.124628506110965
+"DRIVE_40","train","data/raw/training/images/40_training.tif","data/raw/training/1st_manual/40_manual1.gif","data/raw/training/mask/40_training_mask.gif",0.110144774291329

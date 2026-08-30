@@ -111,6 +111,32 @@
     "smoke_patches_per_image": 2,
     "smoke_batch_size": 2
   },
+  "vessel_segmentation": {
+    "enabled": true,
+    "patch_size": 128,
+    "patches_per_image": 200,
+    "vessel_patch_fraction": 0.5,
+    "batch_size": 16,
+    "max_epochs": 30,
+    "learning_rate": 0.001,
+    "base_filters": 32,
+    "encoder_depth": 4,
+    "dice_weight": 0.5,
+    "early_stopping_patience": 8,
+    "roc_thresholds": 101,
+    "operating_threshold": 0.5,
+    "tile_overlap": 32,
+    "green_clahe": true,
+    "clahe_clip_limit": 0.01,
+    "clahe_tiles": 8,
+    "shuffle_buffer_images": 7,
+    "checkpoint": "results/20260831_003101_vessel_segmentation/best_vessel_model.mat",
+    "seed": 42,
+    "smoke_epochs": 1,
+    "smoke_images": 2,
+    "smoke_patches_per_image": 4,
+    "smoke_batch_size": 2
+  },
   "data": {
     "dataset": "APTOS"
   },
