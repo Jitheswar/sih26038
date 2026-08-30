@@ -58,6 +58,53 @@ At pipeline level (ablations A8 and A9, validation split, n = 550) the restricte
 The classical channel (A5) still handles 27.5 per cent of the caseload autonomously, so it remains the best measured pipeline on the number the system exists to move, and `pipeline.learned_lesion_evidence` stays `false`.
 The next question is about the agreement check and the CNN, not about lesion thresholds.
 
+That question has now been measured, and the answer is that the agreement check is escalating for two reasons the design did not ask for.
+Every escalation on the validation split was attributed to the §8.6 state that caused it (`eval/agreementLevelMismatch.m`, results in `results/20260830_200447_agreement_level_mismatch` and `results/20260830_200454_agreement_level_mismatch`).
+
+The Grad-CAM spatial check is the largest single cause in every configuration: 335 of 399 escalations in A5, 340 of 525 in A7, 314 of 512 in A9.
+§8.6 specifies that state as a report flag with escalation to be considered; the code raises it as a mandatory reason code, and `decisionConfiguration` refuses to start if it is switched off.
+Its test is `mean(heatmap(candidatePoints) >= 0.35) >= 0.25`, two constants that are not in configuration and were not selected against data, applied to a channel §8.3 records as unable to localise a microaneurysm.
+
+The exact ICDR level comparison is the second cause.
+All 174 insufficient-evidence escalations in A9 are level mismatches, and 163 of them (93.7 per cent) place the patient on the same side of the referral decision and differ only on severity.
+The largest single cell is 142 cases where the CNN says Level 0 and the rule engine says Level 1: both below the referral threshold, both agreeing the patient does not need referral, escalated anyway.
+
+The two compose, and together they explain why the better lesion channel lowered coverage.
+The comparison runs only when the rule engine can reach Level 2.
+The classical channel's ceiling is Level 1, so in A5 it never runs; the restricted learned channel's ceiling is Level 2, so in A9 it runs and adds 174 escalations that did not previously exist.
+`eval/agreementCheckCases.m` reproduces this with no model and no image: the same CNN prediction is referred against a channel capped at Level 1 and escalated against a channel reaching Level 2.
+So the drop from 27.5 to 6.9 per cent coverage is the agreement check penalising the evidence channel for expressing more of the scale, not the learned channel performing worse.
+
+Both repairs have now been measured, as ablations A10 to A13 (validation split, n = 550, results in `results/20260830_232525_ablation_A1_A5`).
+Each differs from its base configuration in `decision_policy` alone, so the measured difference is attributable to the agreement check and nothing else.
+
+| Cfg | Levels | Spatial check | Coverage | Auto accuracy | Referable sent home |
+| --- | --- | --- | --- | --- | --- |
+| A5 - classical, shipped | exact | gate | 0.2745 | 0.9934 | 1 |
+| A9 - learned, hard exudates | exact | gate | 0.0691 | 0.9474 | 0 |
+| A10 - learned, endpoint levels | endpoint | gate | 0.3273 | 0.9889 | **0** |
+| A11 - learned, spatial advisory | exact | advisory | 0.2436 | 0.9552 | 2 |
+| **A12 - learned, both repairs** | endpoint | advisory | **0.6636** | **0.9836** | **2** |
+| A13 - classical, both repairs | endpoint | advisory | 0.7382 | 0.9704 | 4 |
+
+Comparing the channels on the referable endpoint instead of on exact ICDR equality (A10) costs nothing: coverage rises from 0.0691 to 0.3273, zero referable patients are sent home, and autonomous accuracy rises from 0.9474 to 0.9889.
+It beats the shipped A5 on both axes at once, more coverage at fewer patients sent home, so it reads as a defect repair rather than a trade-off.
+
+Both repairs together (A12) take coverage from 0.0691 to 0.6636, a 9.6-fold increase, for two referable patients sent home out of 223.
+The A1 CNN-only baseline sends 4 home out of 550 autonomous cases, 0.73 per cent; A12 sends 2 out of 365, 0.55 per cent.
+So the deferral pipeline is now safer per case it decides than the classifier alone and hands the remaining third to a human, which is what §4.2 claims for it and what it was not doing before.
+
+This reverses the conclusion recorded above: with the agreement check no longer penalising a channel for reaching Level 2, the learned channel is ahead of the classical one at equal policy.
+A13 has the highest coverage of any configuration, 0.7382, and is not the best one: it sends 4 referable patients home out of 406 autonomous cases, a per-case miss rate of 0.99 per cent, worse than using the classifier alone.
+Coverage is the number the system exists to move and it is not the number to select on.
+
+Sensitivity in the ablation table counts an escalated referable case as not referred, so A12's 0.5247 does not mean it misses 47 per cent of referable patients.
+Of 223 referable frames it auto-refers 117, escalates 104 to a human who sees them, and auto-clears 2.
+
+Nothing has been adopted.
+`config/default.json` is unchanged, `escalateOnExplanationDisagreement` still defaults to `true`, `levelComparison` still defaults to `exact`, `pipeline.learned_lesion_evidence` stays `false`, and the operating point frozen on 23 August is untouched.
+These are validation-split numbers separated by small integer miss counts, and relaxing the spatial gate is a clinical judgement rather than only a technical one, so adoption is recorded in §11.6 as a recommendation awaiting that decision.
+
 The sealed external test set (Messidor-2, `data/sealed/`) has not been opened. All development to date - architecture, hyperparameters, thresholds, calibration - used only the train / validation / calibration splits. It is opened once, by the human key-holder, after the operating point is frozen and dated, and any result from it is reported alongside the internal numbers rather than replacing them.
 IDRiD Set-B is not the sealed set; it is an ordinary held-out split, never trained on and never used to select an epoch.
 
@@ -66,7 +113,7 @@ This is a screening aid and research prototype, not a medical device or a clinic
 ## Repository layout
 
 ```
-config/    default.json (frozen run configuration) and ablation_A1..A9.json
+config/    default.json (frozen run configuration) and ablation_A1..A13.json
 data/      PROVENANCE.md, patient-level splits and IDRiD lesion splits (data/splits/), sealed external set (data/sealed/, not read)
 src/       MATLAB packages: +quality +segment +grade +explain +report +common +data
 simulink/  district_model.slx and the capacity sweep experiments

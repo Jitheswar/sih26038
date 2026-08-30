@@ -85,8 +85,16 @@ if rule.unknownNeovascularisation
     end
 end
 
-agreementStatus = localAgreementStatus(normalized);
+agreementStatus = localAgreementStatus(normalized, configuration);
 agreementBasis = localAgreementBasis(normalized);
+% When the spatial check is advisory the state is still computed and still
+% reported; it simply does not force the decision.  Reporting it as a
+% disclosure rather than dropping it keeps §8.6's "flag in the report as
+% reduced explanation confidence" true of the output.
+if ~configuration.escalateOnExplanationDisagreement && ...
+        localSpatiallyInconsistent(normalized)
+    disclosures{end + 1} = 'explanation-spatially-inconsistent'; %#ok<AGROW>
+end
 if strcmp(agreementStatus, 'spatially inconsistent')
     codes{end + 1} = 'explanation-disagreement'; %#ok<AGROW>
 elseif strcmp(agreementStatus, 'CNN referable but evidence unsupported')
@@ -231,11 +239,24 @@ result.candidateEvidenceWarning = rule.candidateWarning;
 result.explanation = explanation;
 end
 
-function status = localAgreementStatus(normalized)
+function answer = localSpatiallyInconsistent(normalized)
+%LOCALSPATIALLYINCONSISTENT Did the Grad-CAM spatial check fail?
+%   Separated from the status chain so the condition can be reported when
+%   the check is advisory and the chain no longer short-circuits on it.
+explanation = normalized.explanation;
+answer = explanation.spatialKnown && ~explanation.spatiallyAgree;
+end
+
+function status = localAgreementStatus(normalized, configuration)
 cnn = normalized.cnn;
 rule = normalized.rule;
 explanation = normalized.explanation;
-if explanation.spatialKnown && ~explanation.spatiallyAgree
+% The spatial state short-circuits the chain only while it is a gate.  Left
+% in place when advisory it would mask every state below it, so a case whose
+% attention map disagrees would never be examined for the under-detected
+% condition that actually carries the safety property.
+if configuration.escalateOnExplanationDisagreement && ...
+        localSpatiallyInconsistent(normalized)
     status = 'spatially inconsistent';
     return;
 end
@@ -257,8 +278,24 @@ if ~rule.present || ~rule.levelKnown || ~rule.referableKnown || ...
     return;
 end
 if rule.referableLevelReachable
-    % Both channels can express the whole scale, so compare them directly.
-    if cnn.predictedLevel ~= rule.level
+    % Both channels can reach the referral boundary, so compare them.  How
+    % is configuration.levelComparison: 'exact' requires equal ICDR levels,
+    % 'endpoint' requires only that they place the patient on the same side
+    % of the referral decision (§11.2), which is the whole of what the
+    % three-way disposition acts on.
+    %
+    % 'exact' is unreachable above the rule engine's own ceiling.  With hard
+    % exudates as the only trusted head that ceiling is Level 2, so a CNN
+    % prediction of Level 3 or 4 mismatches however well either channel
+    % performs, and the §11.6 entry of 30 August measured 163 of 174 such
+    % mismatches as severity-only disagreements on cases where both channels
+    % already agreed about referral.
+    if strcmp(configuration.levelComparison, 'endpoint')
+        if (cnn.predictedLevel >= 2) ~= localEvidenceReferable(normalized)
+            status = 'insufficient evidence';
+            return;
+        end
+    elseif cnn.predictedLevel ~= rule.level
         status = 'insufficient evidence';
         return;
     end

@@ -464,6 +464,29 @@ decisions.autonomous = false(n, 1);
 decisions.predictedReferable = false(n, 1);
 decisions.predictedLevel = nan(n, 1);
 decisions.reason = strings(n, 1);
+% Diagnostic record.  Every field here is a value the decision already
+% computed; recording it changes no disposition.  It exists because the
+% reason-code string alone cannot separate the two ways
+% localAgreementStatus reaches "insufficient evidence" - a missing input
+% versus an exact ICDR level mismatch - and that distinction is the whole
+% question when the pipeline escalates most of its caseload.
+decisions.agreementStatus = strings(n, 1);
+decisions.agreementBasis = strings(n, 1);
+decisions.ruleLevel = nan(n, 1);
+decisions.spatiallyAgree = false(n, 1);
+decisions.evidenceSupportsCNN = false(n, 1);
+decisions.candidateCount = nan(n, 1);
+decisions.ruleCaseUnknown = false(n, 1);
+decisions.referableProbability = nan(n, 1);
+% The policy's own gates, not the frozen operating point.  frozen.threshold
+% is 0.40 and selects the reported sensitivity/specificity; the policy
+% refers at referableThreshold and clears below autoClearThreshold, and a
+% case between the two escalates by design.  Attributing escalations
+% against the wrong number would read the deferral band as a failure.
+decisions.policyReferableThreshold = localPolicyThreshold(entry, ...
+    {'referableThreshold', 'referable_threshold'}, 0.70);
+decisions.policyAutoClearThreshold = localPolicyThreshold(entry, ...
+    {'autoClearThreshold', 'auto_clear_threshold'}, 0.40);
 
 for index = 1:n
     if features.failed(index)
@@ -537,6 +560,40 @@ for index = 1:n
     decisions.reason(index) = string(strjoin(policyResult.reasonCodes, ','));
     decisions.autonomous(index) = ~strcmp(policyResult.decision, 'escalate');
     decisions.predictedReferable(index) = strcmp(policyResult.decision, 'refer');
+    decisions.agreementStatus(index) = string(policyResult.agreementStatus);
+    decisions.agreementBasis(index) = string(policyResult.agreementBasis);
+    decisions.ruleLevel(index) = policyResult.icdrRuleLevel;
+    decisions.spatiallyAgree(index) = features.spatiallyAgree(index);
+    decisions.evidenceSupportsCNN(index) = features.evidenceSupportsCNN(index);
+    decisions.candidateCount(index) = features.candidateCount(index);
+    decisions.ruleCaseUnknown(index) = features.ruleCaseUnknown(index);
+    decisions.referableProbability(index) = features.referableProbability(index);
+end
+end
+
+function value = localPolicyThreshold(entry, names, defaultValue)
+%LOCALPOLICYTHRESHOLD One decision-policy threshold from an ablation entry.
+%   Diagnostic only.  grade.decisionPolicy reads the same configuration
+%   through its own validated path; this reads it again for the record so
+%   the harness can report which gate a case fell short of.
+value = defaultValue;
+policy = [];
+if isfield(entry.config, 'decision_policy')
+    policy = entry.config.decision_policy;
+elseif isfield(entry.config, 'decisionPolicy')
+    policy = entry.config.decisionPolicy;
+end
+if ~isstruct(policy) || ~isscalar(policy)
+    return;
+end
+for index = 1:numel(names)
+    if isfield(policy, names{index})
+        candidate = policy.(names{index});
+        if isnumeric(candidate) && isscalar(candidate) && isfinite(candidate)
+            value = double(candidate);
+            return;
+        end
+    end
 end
 end
 

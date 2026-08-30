@@ -1,0 +1,82 @@
+{
+  "ablation": {
+    "id": "A13",
+    "configuration": "Full pipeline, classical evidence, both agreement repairs",
+    "establishes": "The same two repairs on the shipped configuration. A5 is what is deployed today, so what the repairs are worth on the classical channel decides whether they change the deployed pipeline or only the learned one.",
+    "uses_cnn": true,
+    "source": "docs/SIH26038_design.html \u00a711.6",
+    "note": "Differs from its base configuration in the decision policy only. The pipeline stages, the frozen checkpoint, the frozen temperature, the operating point and the trusted lesion heads are all identical, so the measured difference is attributable to the agreement check and to nothing else."
+  },
+  "pipeline": {
+    "quality_gate": true,
+    "enhancement": true,
+    "lesion_evidence": true,
+    "agreement_check": true,
+    "deferral": true,
+    "learned_lesion_evidence": false
+  },
+  "preprocessing": {
+    "output_type": "single",
+    "channel_mean": [
+      0,
+      0,
+      0
+    ],
+    "channel_std": [
+      0.00392156862745098,
+      0.00392156862745098,
+      0.00392156862745098
+    ]
+  },
+  "grading": {
+    "backbone": "resnet50",
+    "input_size": 448,
+    "head": "softmax",
+    "num_classes": 5,
+    "batch_size": 16,
+    "seed": 42,
+    "dropout": 0.5
+  },
+  "augmentation": {
+    "rotation": true,
+    "flips": true,
+    "scale_jitter": [
+      0.85,
+      1.0
+    ],
+    "brightness_shift": 10,
+    "contrast_gain": [
+      0.9,
+      1.1
+    ]
+  },
+  "class_balancing": {
+    "method": "inverse_frequency",
+    "oversampling": true
+  },
+  "data": {
+    "dataset": "APTOS"
+  },
+  "operating_point": {
+    "referable_threshold": 0.4,
+    "frozen_on": "2026-08-23",
+    "applies_to": "decision_policy.autoClearThreshold",
+    "applies_to_note": "autoClearThreshold is the only gate that can send a patient home, so it alone governs screening sensitivity. referableThreshold splits refer vs escalate and does not affect sensitivity.",
+    "temperature": 2.1414,
+    "model": "results/20260823_184930/epoch_08.mat",
+    "calibration": "results/20260823_204608",
+    "validation_sensitivity": 0.9821,
+    "validation_specificity": 0.9174
+  },
+  "decision_policy": {
+    "referableThreshold": 0.7,
+    "autoClearThreshold": 0.4,
+    "uncertaintyThreshold": 0.5,
+    "requireEvidenceForAutoClear": true,
+    "alwaysEscalateLevel4": true,
+    "escalateOnUnknownEvidence": true,
+    "escalateOnExplanationDisagreement": false,
+    "escalateOnCapabilityGap": false,
+    "levelComparison": "endpoint"
+  }
+}

@@ -1325,6 +1325,91 @@ AGREEMENT      Rule path and CNN agree
 
 <p><strong>A cost the A8 row hides.</strong> Its per-class recall is [0.059, 0.304, 0.827, 0, 0]. Levels 3 and 4 are never returned, and neither is a detector failure. Level 3 is the 4-2-1 haemorrhage criterion, which needs the haemorrhage head that this configuration switches off, and Level 4 needs neovascularisation masks that IDRiD does not carry (§6.6). So the restricted channel can say "referable" and cannot say "severe" or "proliferative". For a referral endpoint that is acceptable and it is why sensitivity stays at 0.8072, but it narrows what the evidence can tell a clinician, and any future use of this channel for severity rather than referral has to restore the haemorrhage head first.</p>
 
+<h3>§11.6 measured results - 30 August 2026, why the agreement check escalates</h3>
+<p>The A8/A9 read-out above closed with "the next question is about the agreement check and the CNN, not about lesion thresholds". This is that question answered. Every escalation on the validation split is attributed to the §8.6 agreement state that caused it, and where that state is a level comparison, the two channels' ICDR levels are cross-tabulated. Run with <code>eval/agreementLevelMismatch.m</code> over the saved A1-A9 runs; results: <code>results/20260830_200447_agreement_level_mismatch</code> and <code>results/20260830_200454_agreement_level_mismatch</code>. Boundary behaviour reproduced without a model or an image by <code>eval/agreementCheckCases.m</code>.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Rule ceiling</strong></td><td><strong>Escalated</strong></td><td><strong>Spatial check</strong></td><td><strong>Insufficient evidence</strong></td><td><strong>Over-detected</strong></td><td><strong>Under-detected</strong></td></tr>
+<tr><td>A5 - full pipeline, classical</td><td>Level 1</td><td>399 / 550</td><td><strong>335 (84.0%)</strong></td><td>0 (0.0%)</td><td>0</td><td>35 (8.8%)</td></tr>
+<tr><td>A7 - full pipeline, learned, four heads</td><td>Level 3</td><td>525 / 550</td><td><strong>340 (64.8%)</strong></td><td>14 (2.7%)</td><td>163 (31.0%)</td><td>0</td></tr>
+<tr><td>A9 - full pipeline, learned, hard exudates</td><td>Level 2</td><td>512 / 550</td><td><strong>314 (61.3%)</strong></td><td><strong>174 (34.0%)</strong></td><td>15 (2.9%)</td><td>1 (0.2%)</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Finding 1 - the spatial check is the largest single cause, and §8.6 does not ask it to be</h4>
+<p>The Grad-CAM spatial check causes 335 of 399 escalations in A5, 340 of 525 in A7 and 314 of 512 in A9. It is the largest single cause in every configuration that carries the agreement check. <span class="tag v">Verified</span></p>
+<p>The §8.6 table specifies the spatially-inconsistent state as "Flag in the report as reduced explanation confidence. Consider escalation." The implementation raises <code>explanation-disagreement</code> as a mandatory reason code, which forces escalation, and <code>grade/private/decisionConfiguration.m</code> raises <code>grade:UnsafeDecisionConfiguration</code> if <code>escalateOnExplanationDisagreement</code> is set false. The state the document describes as advisory is implemented as a gate that cannot be opened from configuration. That also departs from §11.6 and §13.3, under which a pipeline mechanism switches from <code>config/*.json</code> rather than by editing code. <span class="tag v">Verified</span></p>
+<p>The test itself is <code>localSpatialAgreement</code> in <code>src/+app/runScreeningCase.m</code>: <code>mean(heatmap(candidatePoints) &gt;= 0.35) &gt;= 0.25</code>. Neither constant is in configuration and neither was selected against data. Its own comment records that this check has already produced a total-escalation defect once, when the cut was applied to the unnormalized map. <span class="tag v">Verified</span></p>
+<p>§8.3 states that at 448&times;448 the Grad-CAM map is 14&times;14, one cell covers roughly 32&times;32 input pixels, and the method "physically cannot localise a microaneurysm" - and directs that it be reported as regional attention, not lesion localisation. A hard gate demanding that lesion candidates coincide with attention peaks asks the channel for exactly the precision §8.3 says it does not have. <span class="tag k">Established</span></p>
+</div>
+
+<div class="box warn">
+<h4>Finding 2 - the level comparison escalates cases both channels agree about</h4>
+<p>All 174 insufficient-evidence escalations in A9 are exact ICDR level mismatches. Of those, <strong>163 (93.7%) place the patient on the same side of the referral decision</strong> and differ only on severity. Only 11 are disagreements about referability, which is the disagreement §8.6 exists to catch. <span class="tag v">Verified</span></p>
+<p>The dominant cell is CNN Level 0 against rule Level 1, 142 cases: the classifier reports no retinopathy, the rule engine reports microaneurysms only, both are below the referral threshold, and the case is escalated to a human. §11.2 names the primary endpoint as referable versus not referable. Escalating on a disagreement that does not cross that endpoint spends human capacity on a distinction the system does not act on. <span class="tag v">Verified</span></p>
+<p>A further 24 mismatches are unreachable by construction. <code>grade.icdrRule</code> reports <code>maxReachableLevel</code>, which is Level 2 for hard-exudate evidence, and <code>normalizeDecisionInput</code> reduces it to the boolean <code>referableLevelReachable</code> (<code>maxReachableLevel &gt;= 2</code>), discarding the ceiling. The comparison then demands equality against a CNN that predicts up to Level 4, so every CNN prediction above the ceiling mismatches however good either channel becomes. <code>icdrRule</code> also computes <code>levelIsCapabilityCapped</code>, which nothing in the codebase reads. <span class="tag v">Verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>Why improving the lesion channel lowered coverage</h4>
+<p>The two findings compose, and together they explain the A5-versus-A9 result rather than merely accompanying it. The exact-level comparison runs only when <code>referableLevelReachable</code> is true. The classical channel's ceiling is Level 1, so in A5 the comparison never runs and the state is reached zero times. The restricted learned channel's ceiling is Level 2, so in A9 the comparison runs and contributes 174 escalations that did not exist before. <span class="tag v">Verified</span></p>
+<p><code>eval/agreementCheckCases.m</code> reproduces this with no model and no image. The same CNN prediction of Level 3, put in front of a channel capped at Level 1, is referred; put in front of a channel reaching Level 2, it escalates. A better evidence channel is penalised for being able to express more of the scale.</p>
+<p>So the 27.5% to 6.9% coverage drop between A5 and A9 is not evidence that the learned channel is worse. A8 measured it as clearly better than the classical channel it replaced. The drop is the agreement check responding to a higher ceiling by activating a comparison that cannot be satisfied. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>What this does and does not license.</strong> 488 of A9's 512 escalations, and 335 of A5's 399, come from the two mechanisms above. That bounds what is available from repairing them; it does not predict the coverage that repair would deliver, because a case released by one gate must still pass the others and the positive conditions for refer or auto-clear. Nothing here is a reason to relax the under-detected check of §8.6, which is the safety property the pipeline is built around and which fires on 35 cases in A5 and 1 in A9. <span class="tag u">Open</span></p>
+<p><strong>Not yet done.</strong> No threshold, gate or configuration has been changed on the strength of this measurement. The operating point frozen on 23 August is untouched and every number reported above the freeze still stands. Three questions follow and are open: whether the spatially-inconsistent state should escalate at all or only annotate, as §8.6 reads; whether the level comparison should be made on the referable endpoint rather than on exact ICDR equality; and whether <code>maxReachableLevel</code> should bound the comparison so a capped channel is never asked for a level it cannot express. Each changes reported numbers, so each needs its own measurement and its own dated entry. <span class="tag u">Open</span></p>
+
+<h3>§11.6 measured results - 30 August 2026, A10-A13, repairing the agreement check</h3>
+<p>The entry above named three candidate repairs and measured none of them. These four configurations measure them. Each differs from its base in <code>decision_policy</code> alone: the pipeline stages, the frozen checkpoint, the frozen temperature, the operating point and the trusted lesion heads are identical, so the difference is attributable to the agreement check and to nothing else. Run with <code>eval/ablationHarness.m</code>; results: <code>results/20260830_232525_ablation_A1_A5</code>.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Levels</strong></td><td><strong>Spatial check</strong></td><td><strong>Coverage</strong></td><td><strong>Auto accuracy</strong></td><td><strong>Referable sent home</strong></td><td><strong>clear / refer / escalate</strong></td></tr>
+<tr><td>A5 - classical, shipped</td><td>exact</td><td>gate</td><td>0.2745</td><td>0.9934</td><td>1</td><td>140 / 11 / 399</td></tr>
+<tr><td>A9 - learned, hard exudates</td><td>exact</td><td>gate</td><td>0.0691</td><td>0.9474</td><td>0</td><td>9 / 29 / 512</td></tr>
+<tr><td>A10 - learned, endpoint levels</td><td>endpoint</td><td>gate</td><td>0.3273</td><td>0.9889</td><td><strong>0</strong></td><td>139 / 41 / 370</td></tr>
+<tr><td>A11 - learned, spatial advisory</td><td>exact</td><td>advisory</td><td>0.2436</td><td>0.9552</td><td>2</td><td>35 / 99 / 416</td></tr>
+<tr><td><strong>A12 - learned, both repairs</strong></td><td>endpoint</td><td>advisory</td><td><strong>0.6636</strong></td><td><strong>0.9836</strong></td><td><strong>2</strong></td><td>244 / 121 / 185</td></tr>
+<tr><td>A13 - classical, both repairs</td><td>endpoint</td><td>advisory</td><td>0.7382</td><td>0.9704</td><td>4</td><td>282 / 124 / 144</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Read the sensitivity column carefully, or not at all</h4>
+<p>The all-cases sensitivity in the harness output counts an escalated referable case as not referred, because the pipeline did not itself refer it. A12's 0.5247 therefore does <em>not</em> mean it misses 47 per cent of referable patients. Of 223 referable frames it auto-refers 117, escalates 104 to a human who sees them, and auto-clears 2. Only the last two are patients the system sends home. The column that matters for safety is "referable sent home", and it is reported here in counts rather than rates because two events out of 223 carry an interval far wider than three decimal places suggest. <span class="tag v">Verified</span></p>
+</div>
+
+<div class="box ok">
+<h4>A10 costs nothing and should be read as a defect repair, not a trade-off</h4>
+<p>Comparing the two channels on the referable endpoint rather than on exact ICDR equality takes coverage from 0.0691 to 0.3273 and sends <strong>zero</strong> referable patients home, with autonomous accuracy rising from 0.9474 to 0.9889. It dominates A9 on every axis and dominates the shipped A5 on both axes that matter: more coverage (180 against 151 autonomous cases) at fewer referable patients sent home (0 against 1). <span class="tag v">Verified</span></p>
+<p>Nothing was given up to get it. The endpoint disagreements and the under-detected condition are still caught, by the dedicated §8.6 states above the level comparison, which are unchanged and still mandatory. Exact equality was only ever adding escalations on cases where both channels agreed about referral, and above the rule engine's ceiling it was adding escalations that no improvement to either channel could have removed.</p>
+</div>
+
+<div class="box ok">
+<h4>A12 is the best measured pipeline in this study, and it is the learned channel</h4>
+<p>Both repairs together take coverage from 0.0691 to <strong>0.6636</strong>, a 9.6-fold increase, for two referable patients sent home. Autonomous accuracy is 0.9836, higher than A9's 0.9474 despite handling 365 cases rather than 38. <span class="tag v">Verified</span></p>
+<p>The repairs compose more than additively. A10 alone reaches 0.3273 and A11 alone 0.2436; independent gates would predict roughly 0.50 together, and the measured figure is 0.6636. That is expected once the mechanism is understood: a case had to clear both gates, so releasing either alone leaves it held by the other.</p>
+<p><strong>Against the CNN-only baseline.</strong> A1 handles all 550 cases and sends 4 referable patients home, a rate of 0.73 per cent of autonomous cases. A12 handles 365 and sends 2 home, 0.55 per cent. The deferral pipeline is now doing what §4.2 claims for it: it is safer per case it decides than the classifier alone, and it hands the remaining third to a human rather than guessing. Before these repairs it was not - A9 bought its zero misses by deciding almost nothing. <span class="tag v">Verified</span></p>
+<p><strong>This reverses the conclusion of the 30 August A8/A9 entry.</strong> That entry recorded A5 as the best measured pipeline on coverage and kept <code>pipeline.learned_lesion_evidence</code> at <code>false</code>. With the agreement check no longer penalising a channel for reaching Level 2, the learned channel is ahead of the classical one at equal policy: A12 covers 0.6636 at 2 sent home against A13's 0.7382 at 4. The earlier comparison was measuring the agreement check, not the channels.</p>
+</div>
+
+<div class="box warn">
+<h4>A13 has the highest coverage and is not the best configuration</h4>
+<p>A13 reaches 0.7382 coverage, above A12, and is worse where it counts. It sends 4 referable patients home out of 406 autonomous cases, 0.99 per cent, against A12's 0.55 per cent - and against the CNN-only baseline's 0.73 per cent. Its extra coverage is bought at a per-case miss rate <em>worse than using the classifier alone</em>, which is the one thing a deferral pipeline must never be. Autonomous accuracy is 0.9704 against A12's 0.9836 and specificity 0.9755 against 0.9878. <span class="tag v">Verified</span></p>
+<p>Coverage is the number the system exists to move and it is not the number to select on. A13 is the configuration that would have been chosen by reading the coverage column alone, and it is the wrong one.</p>
+</div>
+
+<div class="box warn">
+<h4>What these numbers do not establish</h4>
+<p><strong>They are validation-split numbers.</strong> The validation split selected the training epoch, so it carries the mild optimism that implies. The sealed Messidor-2 set (§10.4) remains unopened and is the only external read available; nothing here changes that it is opened once, after the configuration is settled. <span class="tag u">Open</span></p>
+<p><strong>The miss counts are small integers.</strong> One, two and four referable patients sent home separate these configurations, and on 550 frames those counts carry intervals wide enough to overlap. A12 being safer than A13 is supported by the direction of three separate measures at once - misses, autonomous accuracy and specificity - rather than by any one of them being individually decisive. <span class="tag u">Partly verified</span></p>
+<p><strong>Relaxing the spatial gate is a clinical judgement, not only a technical one.</strong> A11 isolates its cost: two referable patients sent home, where A10 sends none. The measurement says what the gate buys and what it costs; it does not say that the trade is acceptable, and that decision belongs with the §12 clinician review rather than with this table. §8.6's own wording supports the change, and the under-detected check that carries the unexplained-prediction property is untouched in every configuration here. <span class="tag u">Open</span></p>
+<p><strong>Nothing is adopted.</strong> <code>config/default.json</code> is unchanged, <code>escalateOnExplanationDisagreement</code> still defaults to <code>true</code>, <code>levelComparison</code> still defaults to <code>exact</code>, <code>pipeline.learned_lesion_evidence</code> is still <code>false</code>, and the operating point frozen on 23 August is untouched. Adopting A10 or A12 changes the shipped screening behaviour and is recorded here as a recommendation awaiting that decision, not as a change made. <span class="tag u">Open</span></p>
+</div>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">
@@ -1490,7 +1575,7 @@ AGREEMENT      Rule path and CNN agree
 <pre><code>sih26038/
   config/
     default.json          % every hyperparameter and pipeline switch
-    ablation_A1..A5.json  % §11.6 configurations
+    ablation_A1..A13.json % §11.6 configurations
   data/
     PROVENANCE.md         % §10.3
     splits/               % committed CSV split files - never regenerated

@@ -50,19 +50,73 @@ configuration.escalateOnCapabilityGap = localOptionalLogical(policy, ...
     {'escalateOnCapabilityGap', 'escalate_on_capability_gap'}, ...
     'escalateOnCapabilityGap', false);
 
+% How the two channels' ICDR levels are compared once the rule engine can
+% reach Level 2.
+%
+%   'exact'     Levels must be equal.  The original behaviour and the
+%               default, so a configuration that does not mention this gets
+%               exactly what it got before.
+%   'endpoint'  The levels are compared on referable versus not referable,
+%               which is the primary endpoint of §11.2 and the only thing
+%               the three-way decision acts on.
+%
+% The measurement that motivates the option is the §11.6 entry of 30 August:
+% under 'exact', 163 of A9's 174 level-mismatch escalations put the patient
+% on the same side of the referral decision and differ only on severity.
+% Exact equality is also unreachable above the rule engine's own ceiling,
+% which is Level 2 when hard exudates are the only trusted head, so every
+% CNN prediction of Level 3 or 4 mismatches by construction.  Neither the
+% endpoint disagreements nor the under-detected case are given up by
+% 'endpoint': those are caught by the dedicated states above it.
+configuration.levelComparison = localOptionalChoice(policy, ...
+    {'levelComparison', 'level_comparison'}, 'levelComparison', ...
+    'exact', {'exact', 'endpoint'});
+
 if configuration.autoClearThreshold >= configuration.referableThreshold
     error('grade:InvalidDecisionConfiguration', ...
         'The auto-clear threshold must be below the referral threshold.');
 end
 
 % These are safety invariants, not tunable accuracy settings.
+%
+% escalateOnExplanationDisagreement was on this list and is no longer.  It
+% governs the Grad-CAM spatial check, and §8.6 specifies that state as
+% "Flag in the report as reduced explanation confidence. Consider
+% escalation." - an annotation with escalation to be considered, not a
+% mandatory gate.  Refusing to start unless it was true made the one §8.6
+% state the document describes as advisory the only one that could not be
+% switched from configuration, which also contradicts §11.6 and §13.3.  It
+% still defaults to true and is true in every shipped configuration, so no
+% deployed behaviour changes; it is now measurable, which is what the
+% ablation study needs in order to say what it costs.
+%
+% The other three stay locked.  Auto-clear without evidence, an unescalated
+% Level 4, and an unescalated case-level unknown are all failures to refer a
+% patient who may need referral.  A spatial-attention mismatch is not: the
+% under-detected check below it, which is mandatory, is what carries the
+% "the classifier is keying on something that is not disease" safety
+% property that §8.6 is built around.
 if ~configuration.requireEvidenceForAutoClear || ...
         ~configuration.alwaysEscalateLevel4 || ...
-        ~configuration.escalateOnUnknownEvidence || ...
-        ~configuration.escalateOnExplanationDisagreement
+        ~configuration.escalateOnUnknownEvidence
     error('grade:UnsafeDecisionConfiguration', ...
         ['Safety flags require evidence for auto-clear, Level 4 escalation, ', ...
-        'unknown-evidence escalation, and explanation-disagreement escalation.']);
+        'and unknown-evidence escalation.']);
+end
+end
+
+function value = localOptionalChoice(policy, names, label, defaultValue, allowed)
+value = localField(policy, names, []);
+if isempty(value)
+    value = defaultValue;
+    return;
+end
+if isstring(value) && isscalar(value)
+    value = char(value);
+end
+if ~ischar(value) || ~ismember(value, allowed)
+    error('grade:InvalidDecisionConfiguration', ...
+        '%s must be one of: %s.', label, strjoin(allowed, ', '));
 end
 end
 

@@ -19,7 +19,7 @@ This is not a JS project: no npm, no jest, no node.
 Source lives in `src/` as MATLAB package folders (§13.1), so calls are namespaced: `common.preprocess(...)`, `quality.assess(...)`, `explain.gradcam(...)`.
 
 ```
-config/  default.json, ablation_A1..A5.json
+config/  default.json, ablation_A1..A13.json
 data/    PROVENANCE.md, splits/, sealed/
 src/     +quality +segment +grade +explain +report +common
 simulink/  district_model.slx, sweep_experiments.m
@@ -56,7 +56,7 @@ It is opened once, by the human key-holder, after the operating point is frozen 
 If a task appears to need it, stop and say so.
 
 **Pipeline stages switch on and off from `config/*.json`, never by editing or commenting out code** (§11.6, §13.3).
-Ablations A1-A5 are five config files over one code path.
+Ablations A1-A13 are thirteen config files over one code path.
 SimEvents parameters are named variables in a config file, never numbers typed into a block dialog (§9.4).
 
 **`rng(seed)` at the top of every entry point** (§13.2).
