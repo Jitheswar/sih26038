@@ -36,7 +36,7 @@ classdef TestRunScreeningCase < matlab.unittest.TestCase
             testCase.verifySubstring(strjoin(result.warnings, newline), ...
                 'provisional');
             testCase.verifyTrue(result.icdrRuleResult.uncertain);
-            % Seven of the eight evidence fields have no detector in this
+            % Six of the eight evidence fields have no detector in this
             % build, so the rule engine is uncertain on every image.  That is
             % a capability gap and it must not by itself route the case to a
             % human.  This assertion used to pin 'escalate', which is how a
@@ -44,12 +44,23 @@ classdef TestRunScreeningCase < matlab.unittest.TestCase
             % test suite: the test encoded the defect as the expectation.
             testCase.verifyFalse(result.icdrRuleResult.caseUnknownEvidence);
             testCase.verifyFalse(result.icdrRuleResult.humanEscalationRecommended);
+            % Two fields are covered: microaneurysm count from the classical
+            % candidate detector, and hard exudate count from the learned
+            % head adopted on 31 August 2026.  It was seven gap fields and an
+            % unreachable referral level while the classical channel shipped
+            % alone.  The hard-exudate head is what lifts the rule engine's
+            % ceiling to Level 2, and so what makes the §8.6 level comparison
+            % run on this image at all.
             testCase.verifyNumElements( ...
-                result.icdrRuleResult.capabilityGapFields, 7);
-            testCase.verifyFalse(result.icdrRuleResult.referableLevelReachable);
+                result.icdrRuleResult.capabilityGapFields, 6);
+            testCase.verifyTrue(result.icdrRuleResult.referableLevelReachable);
             % The limitation must still reach the clinician-facing output.
+            % It is named 'evidence-capability-gap' rather than
+            % 'capability-capped' because the rule engine is no longer capped
+            % below the referral boundary, while six of its eight fields
+            % still have no detector and the clinician must be told so.
             testCase.verifySubstring(result.threeWayDecision.explanation, ...
-                'capability-capped');
+                'evidence-capability-gap');
             testCase.verifySubstring(strjoin(result.warnings, newline), ...
                 'Capability gap');
             testCase.verifySubstring(result.classProbabilitiesDescription, ...

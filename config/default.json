@@ -5,7 +5,7 @@
     "lesion_evidence": true,
     "agreement_check": true,
     "deferral": true,
-    "learned_lesion_evidence": false
+    "learned_lesion_evidence": true
   },
   "preprocessing": {
     "output_type": "single",
@@ -133,6 +133,7 @@
     "alwaysEscalateLevel4": true,
     "escalateOnUnknownEvidence": true,
     "escalateOnExplanationDisagreement": true,
-    "escalateOnCapabilityGap": false
+    "escalateOnCapabilityGap": false,
+    "levelComparison": "endpoint"
   }
 }

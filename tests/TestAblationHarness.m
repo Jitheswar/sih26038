@@ -1,5 +1,5 @@
 classdef TestAblationHarness < matlab.unittest.TestCase
-    %TESTABLATIONHARNESS Tests for the A1-A5 ablation evaluation path.
+    %TESTABLATIONHARNESS Tests for the A1-A13 ablation evaluation path.
     %
     %   eval/ablationHarness.m composes the screening modules itself rather
     %   than calling app.runScreeningCase, so that the deployed inference
@@ -7,9 +7,15 @@ classdef TestAblationHarness < matlab.unittest.TestCase
     %   carry ablation switches.  The cost of that choice is drift: two
     %   orchestrations of the same modules can diverge silently.
     %
-    %   agreesWithDeployedPipelineForA5 is the pin.  If it fails, the
+    %   agreesWithDeployedPipelineForA10 is the pin.  If it fails, the
     %   harness no longer reproduces the deployed pipeline and every number
     %   it has produced is void.
+    %
+    %   The pin follows config/default.json rather than naming a fixed
+    %   configuration.  It pointed at A5 while the classical channel and the
+    %   exact level comparison shipped; A10 was adopted on 31 August 2026,
+    %   so it points at A10.  Re-point it whenever the deployed
+    %   configuration changes, and never relax it to make it pass.
 
     methods (TestClassSetup)
         function addSourcePath(~)
@@ -21,13 +27,13 @@ classdef TestAblationHarness < matlab.unittest.TestCase
     end
 
     methods (Test)
-        function agreesWithDeployedPipelineForA5(testCase)
+        function agreesWithDeployedPipelineForA10(testCase)
             projectRoot = TestAblationHarness.projectRoot();
             imageCount = 4;
             resultsRoot = tempname;
             cleanup = onCleanup(@() TestAblationHarness.removeDirectory(resultsRoot)); %#ok<NASGU>
 
-            harnessResult = ablationHarness('Configs', {'ablation_A5.json'}, ...
+            harnessResult = ablationHarness('Configs', {'ablation_A10.json'}, ...
                 'Split', 'validation', 'Limit', imageCount, ...
                 'ResultsRoot', resultsRoot);
             harnessDecisions = harnessResult.metrics(1).decisions.decision;
@@ -47,7 +53,7 @@ classdef TestAblationHarness < matlab.unittest.TestCase
                 expected = TestAblationHarness.deployedDecision(deployed);
 
                 testCase.verifyEqual(harnessDecisions(index), expected, ...
-                    sprintf(['A5 decision for %s disagrees with ' ...
+                    sprintf(['A10 decision for %s disagrees with ' ...
                     'app.runScreeningCase. The ablation harness has drifted ' ...
                     'from the deployed pipeline.'], ...
                     char(splitTable.image_id(index))));

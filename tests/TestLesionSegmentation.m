@@ -271,25 +271,43 @@ classdef TestLesionSegmentation < matlab.unittest.TestCase
             testCase.verifyTrue(result.referableLevelReachable);
         end
 
-        function testLearnedEvidenceIsOffForScreeningUntilRecalibrated(testCase)
+        function testLearnedEvidenceIsReadOnlyThroughAPTOSSelectedHeads(testCase)
             % Measured on 30 August 2026 over ten APTOS validation frames:
             % the IDRiD-trained channel, at thresholds selected on the IDRiD
             % validation split, called 10 of 10 referable including all five
             % grade-0 eyes. Specificity from this channel on APTOS is 0.00.
-            % It is validated as a localiser on IDRiD and not as an ICDR
-            % evidence source on APTOS, so the deployed pipeline must not
-            % read it until its thresholds are re-selected against
-            % APTOS-domain data. See the §11.7 transfer box in the design
-            % document. Turning this on is a screening-safety change, not a
-            % configuration tidy-up, and this test is here to make that
+            % Sweeping all fourteen thresholds per head over the calibration
+            % split (n = 365) showed that no threshold set rescues the
+            % four-head channel: ICDR Level 2 fires on the presence of any
+            % non-microaneurysm finding, so the channel ORs its heads and its
+            % specificity is bounded by whichever head most often reports
+            % something on a healthy eye. That head is soft exudates, which
+            % clears under 2 per cent of eyes graded 0 at every threshold up
+            % to 0.975. See the §11.7 transfer box in the design document.
+            %
+            % This test used to require the channel to stay switched off.
+            % Its stated condition was "until its thresholds are re-selected
+            % against APTOS-domain data", that re-selection landed in
+            % 636f803, and the channel was adopted on 31 August 2026. So the
+            % pin has moved rather than been removed: the channel may now be
+            % read, but only through the heads and thresholds re-selection
+            % chose. Widening evidence_heads is a screening-safety change,
+            % not a configuration tidy-up, and this test is here to make that
             % explicit rather than to make it impossible.
             config = jsondecode(fileread( ...
                 TestLesionSegmentation.configPath()));
-            testCase.verifyFalse( ...
-                logical(config.pipeline.learned_lesion_evidence), ...
-                ['pipeline.learned_lesion_evidence must stay false in ' ...
-                'config/default.json until the lesion thresholds are ' ...
-                're-selected against APTOS-domain data.']);
+            heads = cellstr(string( ...
+                config.lesion_segmentation.evidence_heads));
+            testCase.verifyEqual(heads, {'EX'}, ...
+                ['The ICDR evidence channel must read the hard-exudate ' ...
+                'head only. The other three heads were measured on APTOS ' ...
+                'as unable to clear a healthy eye at any threshold, and ' ...
+                'one untrustworthy head caps the specificity of the ' ...
+                'whole channel because Level 2 ORs them together.']);
+            testCase.verifyEqual( ...
+                config.lesion_segmentation.evidence_thresholds.EX, 0.99, ...
+                ['The hard-exudate evidence threshold must stay at the ' ...
+                'value selected against the APTOS calibration split.']);
         end
 
         function testInferenceReturnsMapsOnTheCallersPixelGrid(testCase)

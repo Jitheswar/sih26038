@@ -55,7 +55,8 @@ Which heads are trusted and at what thresholds is now named in `config/default.j
 
 Fixing the evidence channel did not fix the pipeline, and that is the more important result.
 At pipeline level (ablations A8 and A9, validation split, n = 550) the restricted channel raises autonomous coverage only from 4.6 per cent to 6.9 per cent, because the agreement check still cannot reconcile the learned evidence with the CNN and escalates 512 of 550 frames.
-The classical channel (A5) still handles 27.5 per cent of the caseload autonomously, so it remains the best measured pipeline on the number the system exists to move, and `pipeline.learned_lesion_evidence` stays `false`.
+The classical channel (A5) still handles 27.5 per cent of the caseload autonomously, so at the time of this measurement it remained the best measured pipeline on the number the system exists to move, and `pipeline.learned_lesion_evidence` stayed `false`.
+The A10-A13 results below reverse that conclusion and the setting: once the agreement check stops penalising a channel for reaching Level 2, the learned channel is ahead at equal policy.
 The next question is about the agreement check and the CNN, not about lesion thresholds.
 
 That question has now been measured, and the answer is that the agreement check is escalating for two reasons the design did not ask for.
@@ -101,9 +102,19 @@ Coverage is the number the system exists to move and it is not the number to sel
 Sensitivity in the ablation table counts an escalated referable case as not referred, so A12's 0.5247 does not mean it misses 47 per cent of referable patients.
 Of 223 referable frames it auto-refers 117, escalates 104 to a human who sees them, and auto-clears 2.
 
-Nothing has been adopted.
-`config/default.json` is unchanged, `escalateOnExplanationDisagreement` still defaults to `true`, `levelComparison` still defaults to `exact`, `pipeline.learned_lesion_evidence` stays `false`, and the operating point frozen on 23 August is untouched.
-These are validation-split numbers separated by small integer miss counts, and relaxing the spatial gate is a clinical judgement rather than only a technical one, so adoption is recorded in §11.6 as a recommendation awaiting that decision.
+A10 was adopted on 31 August 2026; A12 was not.
+`config/default.json` now sets `decision_policy.levelComparison` to `endpoint` and `pipeline.learned_lesion_evidence` to `true`, which together make the shipped configuration identical to A10.
+Both were needed: the level comparison runs only when the rule engine can reach Level 2, so with the classical channel capped at Level 1 the `endpoint` setting alone would have changed nothing.
+
+A10 was adopted because it is a defect repair rather than a trade-off.
+It dominates the shipped A5 on both axes at once, more autonomous cases (180 against 151) at fewer referable patients sent home (0 against 1), and it gives up nothing: the endpoint disagreement and under-detection checks above the level comparison are unchanged and still mandatory.
+Exact ICDR equality was only ever adding escalations on cases where both channels already agreed about referral, and above the rule engine's ceiling it was adding escalations no improvement to either channel could have removed.
+
+A12 was not adopted.
+Its second repair demotes the Grad-CAM spatial check from a gate to an advisory flag, and relaxing a safety gate is a clinical judgement rather than only a technical one, so it stays recorded in §11.6 as a recommendation awaiting the §12 review.
+`escalateOnExplanationDisagreement` therefore still defaults to `true`.
+
+The operating point frozen on 23 August is untouched: the threshold of 0.40, the temperature and the checkpoint are unchanged, and no metric behind them was re-selected.
 
 The sealed external test set (Messidor-2, `data/sealed/`) has not been opened. All development to date - architecture, hyperparameters, thresholds, calibration - used only the train / validation / calibration splits. It is opened once, by the human key-holder, after the operating point is frozen and dated, and any result from it is reported alongside the internal numbers rather than replacing them.
 IDRiD Set-B is not the sealed set; it is an ordinary held-out split, never trained on and never used to select an epoch.
