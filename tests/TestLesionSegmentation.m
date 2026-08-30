@@ -271,6 +271,27 @@ classdef TestLesionSegmentation < matlab.unittest.TestCase
             testCase.verifyTrue(result.referableLevelReachable);
         end
 
+        function testLearnedEvidenceIsOffForScreeningUntilRecalibrated(testCase)
+            % Measured on 30 August 2026 over ten APTOS validation frames:
+            % the IDRiD-trained channel, at thresholds selected on the IDRiD
+            % validation split, called 10 of 10 referable including all five
+            % grade-0 eyes. Specificity from this channel on APTOS is 0.00.
+            % It is validated as a localiser on IDRiD and not as an ICDR
+            % evidence source on APTOS, so the deployed pipeline must not
+            % read it until its thresholds are re-selected against
+            % APTOS-domain data. See the §11.7 transfer box in the design
+            % document. Turning this on is a screening-safety change, not a
+            % configuration tidy-up, and this test is here to make that
+            % explicit rather than to make it impossible.
+            config = jsondecode(fileread( ...
+                TestLesionSegmentation.configPath()));
+            testCase.verifyFalse( ...
+                logical(config.pipeline.learned_lesion_evidence), ...
+                ['pipeline.learned_lesion_evidence must stay false in ' ...
+                'config/default.json until the lesion thresholds are ' ...
+                're-selected against APTOS-domain data.']);
+        end
+
         function testInferenceReturnsMapsOnTheCallersPixelGrid(testCase)
             [model, image] = TestLesionSegmentation.smallModel(200);
             result = segment.segmentLesions(image, model, ...
