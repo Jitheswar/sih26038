@@ -22,6 +22,7 @@ classdef ScreeningApp < handle
         ProcessedAxes
         GradCAMAxes
         CandidateAxes
+        CandidateCaption
         QualityValue
         AdviceValue
         LevelValue
@@ -604,12 +605,21 @@ classdef ScreeningApp < handle
                 'Preprocessed', 'Shared with training');
             app.GradCAMAxes = app.imageCard(images, 2, 1, ...
                 'Grad-CAM', 'Where the network looked');
-            app.CandidateAxes = app.imageCard(images, 2, 2, ...
-                'Lesion candidates', 'Classical detector');
+            % The caption names whichever channel supplied the evidence,
+            % and is filled in when a case is rendered.  It used to read
+            % "Classical detector" as a constant, which stopped being true
+            % when the learned channel was adopted on 31 August 2026 and
+            % would have had the panel label contradict the report beside it.
+            [app.CandidateAxes, app.CandidateCaption] = app.imageCard( ...
+                images, 2, 2, 'Lesion candidates', 'Evidence channel');
         end
 
-        function ax = imageCard(app, parent, row, column, titleText, subtitleText)
+        function [ax, subtitleLabel] = imageCard(app, parent, row, column, ...
+                titleText, subtitleText)
             %IMAGECARD One titled image panel whose axes fills the card.
+            %   The subtitle label is returned so a panel whose caption
+            %   depends on the case, rather than on the layout, can be
+            %   updated when the case is rendered.
             %   The axes background is the card colour so the letterboxing a
             %   non-matching aspect ratio produces reads as intentional
             %   matting rather than as a broken or half-drawn plot.
@@ -1178,9 +1188,12 @@ classdef ScreeningApp < handle
             app.EscalationValue.Text = sprintf('Escalation reason: %s', ...
                 localDecisionReason(result));
 
-            app.EvidenceWarningValue.Text = ...
-                ['  Classical candidate evidence is provisional and is not ', ...
-                'clinically validated lesion segmentation.'];
+            evidenceSource = localEvidenceSource(result);
+            app.CandidateCaption.Text = evidenceSource;
+            app.EvidenceWarningValue.Text = sprintf( ...
+                ['  Evidence channel: %s. All objects remain candidates: ' ...
+                'this is provisional and is not clinically validated ' ...
+                'lesion segmentation.'], evidenceSource);
             app.EvidenceWarningValue.BackgroundColor = t.amberTint;
         end
 
@@ -1360,6 +1373,25 @@ if isfield(result.threeWayDecision, 'decisionReason')
     text = char(result.threeWayDecision.decisionReason);
 else
     text = 'Quality gate stopped inference.';
+end
+end
+
+function text = localEvidenceSource(result)
+%LOCALEVIDENCESOURCE Name the channel that actually supplied ICDR evidence.
+%   grade.icdrRule records this as evidenceSource, which reads either
+%   "classical candidate evidence" or "learned lesion segmentation (EX)"
+%   naming the trusted heads.  Reading it beats naming a channel in the
+%   layout code: which channel ships is a config decision
+%   (pipeline.learned_lesion_evidence), so a hardcoded caption goes stale
+%   silently the next time that config changes.
+
+text = 'evidence channel unavailable';
+if isfield(result, 'icdrRuleResult') && ...
+        isfield(result.icdrRuleResult, 'evidenceSource')
+    source = char(result.icdrRuleResult.evidenceSource);
+    if ~isempty(source)
+        text = source;
+    end
 end
 end
 

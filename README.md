@@ -116,6 +116,44 @@ Its second repair demotes the Grad-CAM spatial check from a gate to an advisory 
 
 The operating point frozen on 23 August is untouched: the threshold of 0.40, the temperature and the checkpoint are unchanged, and no metric behind them was re-selected.
 
+Vessel segmentation (§6.3, R2.2) is trained.
+A patch-based U-Net on the CLAHE-equalised green channel, trained on DRIVE at 128x128 crops, selected on validation AUC at epoch 8 of 16 before early stopping.
+
+| Split | n frames | Sensitivity (95% Wilson) | Specificity (95% Wilson) | ROC AUC |
+| --- | --- | --- | --- | --- |
+| Validation | 3 | 0.8388 (0.8363-0.8413) | 0.9722 (0.9718-0.9726) | 0.9718 |
+| Test, held out | 3 | 0.7723 (0.7695-0.7751) | 0.9804 (0.9801-0.9808) | 0.9621 |
+
+Every pixel is scored inside the field-of-view mask.
+A DRIVE frame is 31 per cent black corner outside the camera aperture and every one of those pixels is a true negative, so scoring the whole frame would add a third of a frame of free specificity.
+
+Read the intervals with care, and the frame count more carefully.
+The Wilson intervals above are over pooled pixels, and a frame holds a few hundred thousand of them, so they describe sampling error over pixels rather than over eyes.
+The honest spread is frame to frame: sensitivity runs 0.6866 to 0.8454 across the three test frames, an order of magnitude wider than the pixel interval suggests.
+Test sensitivity sits below validation, which is what three frames and one weak frame (DRIVE_25, the densest in the split) produce.
+
+Two provenance points, because §6.3 asks for them explicitly.
+The archive this project holds ships DRIVE's test half without vessel annotations: `data/raw/test` has images and field-of-view masks only, verified against the SHA-256 in `data/PROVENANCE.md`.
+So DRIVE's own 20/20 division cannot be scored locally, and the twenty annotated training frames are split 14/3/3 instead, stratified by vessel fraction (`data/splits/vessel_*.csv`).
+These numbers are therefore a held-out result and **not** the DRIVE benchmark, and they are not comparable to published DRIVE figures the way §6.3 anticipated under R6.1.
+
+Nothing downstream consumes the vessel network yet.
+§6.3 names three uses - venous beading for the 4-2-1 rule, vessel masking to suppress false haemorrhage detections, and neovascularisation features - and none are wired into the screening pipeline.
+Claiming the downstream benefit before it is measured is exactly what §11.1 exists to prevent.
+
+## Demo pack
+
+`~/sih-demo` holds twelve real validation cases, one for each behaviour the pipeline can show, with the full annotated report exported for each.
+The cases are chosen by `eval/selectDemoCases.m`, which queries the recorded per-case decision of the ablation run reported in §11.6, so what each case demonstrates is measured rather than assumed.
+`eval/buildDemoPack.m` then runs each one through `app.runScreeningCase`, the same entry point the demo UI uses, and reports where the deployed path and the harness disagree.
+On the current build all twelve agree.
+
+```bash
+matlab -batch "addpath(genpath('src')); addpath('eval'); selectDemoCases(); buildDemoPack()"
+```
+
+One scenario in that list is unreachable and worth knowing about: `decision_policy.alwaysEscalateLevel4` means no case can ever be auto-referred at ICDR Level 4, because proliferative disease always goes to a human.
+
 The sealed external test set (Messidor-2, `data/sealed/`) has not been opened. All development to date - architecture, hyperparameters, thresholds, calibration - used only the train / validation / calibration splits. It is opened once, by the human key-holder, after the operating point is frozen and dated, and any result from it is reported alongside the internal numbers rather than replacing them.
 IDRiD Set-B is not the sealed set; it is an ordinary held-out split, never trained on and never used to select an epoch.
 
@@ -125,7 +163,7 @@ This is a screening aid and research prototype, not a medical device or a clinic
 
 ```
 config/    default.json (frozen run configuration) and ablation_A1..A13.json
-data/      PROVENANCE.md, patient-level splits and IDRiD lesion splits (data/splits/), sealed external set (data/sealed/, not read)
+data/      PROVENANCE.md, patient-level splits plus IDRiD lesion and DRIVE vessel splits (data/splits/), sealed external set (data/sealed/, not read)
 src/       MATLAB packages: +quality +segment +grade +explain +report +common +data
 simulink/  district_model.slx and the capacity sweep experiments
 eval/      eval/harness.m and the metrics under eval/metrics/
@@ -149,6 +187,18 @@ Train the lesion segmentation network on IDRiD Set-A:
 
 ```bash
 matlab -batch "addpath(genpath('src')); segment.trainLesionSegmentation('config/default.json')"
+```
+
+Train the vessel segmentation network on DRIVE:
+
+```bash
+matlab -batch "addpath(genpath('src')); segment.trainVesselSegmentation('config/default.json')"
+```
+
+Score a vessel checkpoint on the held-out DRIVE split:
+
+```bash
+matlab -batch "addpath(genpath('src')); addpath('eval'); vesselSegmentationEvaluation('Split','test')"
 ```
 
 Re-select the lesion evidence thresholds against APTOS on the calibration split, and run the head-subset study:
@@ -194,6 +244,8 @@ Image Processing, Computer Vision, Deep Learning, Medical Imaging, Statistics an
 - **Lesion segmentation trains on native-resolution crops and never on a resized frame.** The resize is exactly what removes the microaneurysms the network is being trained to find. At inference each frame is instead resampled so its field-of-view diameter matches the training scale, because capture scale differs between datasets by up to 3x.
 - **The lesion loss weights false negatives above false positives** (Tversky, beta > alpha), and the configuration refuses to start otherwise. Lesion pixels are 0.1 to 1.0 per cent of a frame, so a symmetric objective reaches an excellent value by predicting all background.
 - **A head the network was trained for is not automatically a head its output can be trusted from.** Which heads supply ICDR evidence, and at what thresholds, is named in `config/default.json`, because ICDR Level 2 fires on the presence of any non-microaneurysm finding and one untrustworthy head therefore caps the specificity of the whole evidence channel. An untrusted head is declared a capability gap, never reported as a per-case unknown, because the rule engine escalates on a per-case unknown and a permanent restriction presented as one would escalate every patient.
+- **The vessel loss is symmetric and the lesion loss is not, on purpose.** Lesion pixels are 0.1 to 1.0 per cent of a frame, so that path requires Tversky with beta > alpha and refuses to start otherwise. Vessels are 12.5 per cent of the field of view, a hundred times the prevalence, where a recall-weighted objective buys thickened vessels and a worse specificity. `segment.vesselLoss` is a separate function from `segment.lesionLoss` for exactly this reason; unifying them would break one of the two.
+- **Vessel metrics are scored inside the field-of-view mask only.** A DRIVE frame is 31 per cent black corner outside the camera aperture and every one of those pixels is a true negative, so whole-frame scoring hands the result a third of a frame of free specificity.
 - **Bare accuracy is never reported.** Sensitivity and specificity are reported at the frozen operating point with 95% Wilson intervals and stated n; softmax output is not confidence, so temperature-scaled probabilities are reported with ECE and a reliability diagram.
 
 Full detail and rationale for every rule above is in `docs/SIH26038_design.html`; `AGENTS.md` has the equivalent guidance for agents working in this repository.
