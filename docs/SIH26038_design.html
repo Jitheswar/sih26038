@@ -678,6 +678,17 @@ fovRadius = stats.EquivDiameter / 2;</code></pre>
 
 <p>Note the dependency structure this creates: vessel and disc segmentation are not independent deliverables, they are inputs that materially improve lesion precision. That interdependence is itself part of the R6.2 argument that the integrated pipeline beats any single technique &mdash; and it is measurable by running lesion detection with and without the vessel/disc suppression.</p>
 
+<h3>&sect;6.4&ndash;&sect;6.5 implementation &mdash; 30 August 2026</h3>
+<p>Track B is implemented. <code>segment.trainLesionSegmentation</code> trains one multi-label U-Net over the four lesion types at native-resolution 512&times;512 crops; <code>segment.segmentLesions</code> tiles a full frame through it; <code>segment.lesionEvidence</code> reduces the probability maps to discrete lesion counts and per-quadrant haemorrhage counts; and <code>grade.icdrEvidenceFromLesionSegmentation</code> maps those into the eight-field evidence structure <code>grade.icdrRule</code> already consumed. The split is <code>data/splits/lesion_{train,validation,test}.csv</code>, drawn once with seed 42 and committed: IDRiD Set-B is <code>lesion_test</code> in full and is neither trained on nor used to select an epoch.</p>
+<p>The loss is recall-weighted Tversky (&alpha;&nbsp;0.3, &beta;&nbsp;0.7) plus focal cross-entropy, and the configuration refuses to start if &beta;&nbsp;&lt;&nbsp;&alpha;. Measured over Set-A, lesion pixels occupy 0.107% of a frame for microaneurysms, 1.00% for haemorrhages, 0.81% for hard exudates and 0.39% for soft exudates <span class="tag v">Verified</span>, which is the imbalance the weighting exists to answer.</p>
+
+<div class="box warn">
+<h4>Capture scale is a transfer variable, and it is not small</h4>
+<p>A lesion network learns objects at the pixel scale of the frames it trained on. IDRiD is one camera at one protocol: measured over ten Set-A frames the illuminated field is <strong>3279 pixels across and varies by three pixels over the whole sample</strong> <span class="tag v">Verified</span>. APTOS is not one camera. Measured over twelve frames its field ranges from <strong>1055 to 2555 pixels</strong> <span class="tag v">Verified</span>, so the same physical lesion covers between a third and four fifths as many pixels there as the network was trained to expect.</p>
+<p>Feeding APTOS to an IDRiD-trained lesion network unchanged therefore asks it to find objects at a scale it never saw, and nothing in a per-frame output would report that it had happened. <code>segment.segmentLesions</code> resamples every frame so its field diameter matches <code>reference_fov_diameter</code> before tiling, and maps the probability maps back to the caller's pixel grid afterwards; the factor applied is recorded in the result metadata. For an IDRiD frame the factor is 1.00 and the step is a no-op, so the Set-B benchmark number below is unaffected by it.</p>
+<p>State the residual limitation rather than hiding behind the fix: resampling presents lesions at the learned scale, it does not create detail a 1050&times;1050 capture never recorded. A microaneurysm a few pixels across at IDRiD resolution is not present in that frame at any scale factor. This bounds what the microaneurysm head can achieve on the smaller APTOS captures, and it is a further reason &mdash; beyond &sect;6.4's &mdash; to keep the classical Track A detector in the pipeline.</p>
+</div>
+
 <h2>6.6 Neovascularisation (R2.6) &mdash; declared data gap</h2>
 
 <div class="box warn">

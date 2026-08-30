@@ -1,0 +1,12 @@
+image_id,split,relative_path,has_ma,has_he,has_ex,has_se
+"IDRiD_05","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_05.jpg",1,1,1,0
+"IDRiD_07","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_07.jpg",1,1,1,0
+"IDRiD_09","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_09.jpg",1,1,1,0
+"IDRiD_16","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_16.jpg",1,1,1,0
+"IDRiD_17","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_17.jpg",1,1,1,1
+"IDRiD_18","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_18.jpg",1,1,1,1
+"IDRiD_19","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_19.jpg",1,1,1,1
+"IDRiD_24","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_24.jpg",1,1,1,0
+"IDRiD_27","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_27.jpg",1,1,1,0
+"IDRiD_30","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_30.jpg",1,1,1,1
+"IDRiD_50","validation","data/raw/A. Segmentation/1. Original Images/a. Training Set/IDRiD_50.jpg",1,1,1,1

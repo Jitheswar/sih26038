@@ -114,6 +114,10 @@ parser.addParameter('TopFraction', 0.05);
 parser.addParameter('Steps', 20);
 parser.addParameter('SanityLimit', 5);
 parser.addParameter('ResultsRoot', fullfile(localProjectRoot(), 'results'));
+% Optional Track B checkpoint. When supplied, the learned lesion channel is
+% scored in the same pointing game as Grad-CAM and the classical channel,
+% which is the head-to-head comparison §11.7 exists to make.
+parser.addParameter('LesionCheckpoint', '');
 parser.parse(varargin{:});
 
 options = struct();
@@ -124,6 +128,11 @@ options.topFraction = double(parser.Results.TopFraction);
 options.steps = double(parser.Results.Steps);
 options.sanityLimit = double(parser.Results.SanityLimit);
 options.resultsRoot = char(string(parser.Results.ResultsRoot));
+options.lesionCheckpoint = char(string(parser.Results.LesionCheckpoint));
+if ~isempty(options.lesionCheckpoint) && ~isfile(options.lesionCheckpoint)
+    error('eval:MissingLesionCheckpoint', ...
+        'Lesion checkpoint does not exist: %s', options.lesionCheckpoint);
+end
 
 if ~ismember(options.subset, {'testing', 'training'})
     error('eval:InvalidSubset', 'Subset must be testing or training.');
@@ -223,6 +232,16 @@ entry.gradCamHitRate = localPointingGame(gradCamMap, alignedMask, options.topFra
 entry.candidateHitRate = localPointingGame(candidateMap, alignedMask, options.topFraction);
 entry.randomHitRate = localPointingGame(randomMap, alignedMask, options.topFraction);
 
+% Track B, scored in exactly the same pointing game as the other channels.
+if isempty(options.lesionCheckpoint)
+    entry.learnedHitRate = NaN;
+else
+    learnedMap = localLearnedSaliency(image, options.lesionCheckpoint, ...
+        preprocessingMetadata, modelSize);
+    entry.learnedHitRate = localPointingGame(learnedMap, alignedMask, ...
+        options.topFraction);
+end
+
 [entry.deletionAUC, entry.deletionCurve] = localPerturbationCurve( ...
     checkpoint, modelImage, gradCamMap, predictedLevel, options.steps, 'deletion');
 [entry.insertionAUC, entry.insertionCurve] = localPerturbationCurve( ...
@@ -257,6 +276,34 @@ if isfield(preprocessingMetadata, 'fovApplied') && ...
     mask = mask(rowStart:rowEnd, columnStart:columnEnd);
 end
 aligned = imresize(mask, modelSize, 'nearest');
+end
+
+function map = localLearnedSaliency(image, lesionCheckpoint, ...
+    preprocessingMetadata, modelSize)
+%LOCALLEARNEDSALIENCY Dense saliency from the trained lesion network.
+%   The learned channel already produces a dense map per lesion type, so
+%   unlike the classical channel it needs no disc rendering.  The channels
+%   are reduced by taking the strongest lesion response at each pixel: the
+%   pointing game asks whether the explanation points at a lesion, not at
+%   which kind, and the ground-truth mask it is scored against is likewise
+%   the union over lesion types.
+%
+%   The map is put through the same crop-and-resize as the ground-truth
+%   mask, so a hit means the two agree in the model's own frame rather than
+%   in two frames that happen to be the same size.
+
+map = zeros(modelSize);
+try
+    prediction = segment.segmentLesions(image, lesionCheckpoint);
+catch exception
+    warning('eval:LearnedSaliencyFailed', ...
+        'Learned lesion saliency failed: %s', exception.message);
+    return;
+end
+
+combined = max(prediction.probabilityMaps, [], 3);
+map = localAlignMask(combined, preprocessingMetadata, modelSize);
+map = localNormalise(double(map));
 end
 
 function map = localCandidateSaliency(image, config, preprocessingMetadata, modelSize)
@@ -466,6 +513,7 @@ summary.subset = string(options.subset);
 
 summary.gradCamHitRate = localStat([perImage.gradCamHitRate]);
 summary.candidateHitRate = localStat([perImage.candidateHitRate]);
+summary.learnedHitRate = localStat([perImage.learnedHitRate]);
 summary.randomHitRate = localStat([perImage.randomHitRate]);
 summary.deletionAUC = localStat([perImage.deletionAUC]);
 summary.insertionAUC = localStat([perImage.insertionAUC]);
@@ -477,6 +525,9 @@ summary.gradCamLiftOverRandom = summary.gradCamHitRate.mean / ...
     max(summary.randomHitRate.mean, eps);
 summary.candidateLiftOverRandom = summary.candidateHitRate.mean / ...
     max(summary.randomHitRate.mean, eps);
+summary.learnedLiftOverRandom = summary.learnedHitRate.mean / ...
+    max(summary.randomHitRate.mean, eps);
+summary.lesionCheckpoint = string(options.lesionCheckpoint);
 summary.insertionMinusDeletion = summary.insertionAUC.mean - summary.deletionAUC.mean;
 
 if isstruct(sanity) && ~isempty(sanity) && isfield(sanity, 'spearman')
@@ -516,9 +567,17 @@ fprintf('%-26s %-9s %-9s %-9s\n', 'Pointing game', 'mean', 'median', 'lift');
 fprintf('%-26s %-9.4f %-9.4f %-9.2fx\n', '  Grad-CAM', ...
     summary.gradCamHitRate.mean, summary.gradCamHitRate.median, ...
     summary.gradCamLiftOverRandom);
-fprintf('%-26s %-9.4f %-9.4f %-9.2fx\n', '  Lesion-evidence channel', ...
+fprintf('%-26s %-9.4f %-9.4f %-9.2fx\n', '  Lesion channel (classical)', ...
     summary.candidateHitRate.mean, summary.candidateHitRate.median, ...
     summary.candidateLiftOverRandom);
+if summary.learnedHitRate.n > 0
+    fprintf('%-26s %-9.4f %-9.4f %-9.2fx\n', '  Lesion channel (learned)', ...
+        summary.learnedHitRate.mean, summary.learnedHitRate.median, ...
+        summary.learnedLiftOverRandom);
+else
+    fprintf('%-26s %-9s %-9s %-9s\n', '  Lesion channel (learned)', ...
+        'n/a', 'n/a', 'n/a');
+end
 fprintf('%-26s %-9.4f %-9.4f %-9s\n', '  Random control', ...
     summary.randomHitRate.mean, summary.randomHitRate.median, '1.00x');
 fprintf('\nFaithfulness (Grad-CAM)\n');
