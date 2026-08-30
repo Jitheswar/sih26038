@@ -1201,16 +1201,41 @@ classdef ScreeningApp < handle
                 app.showError('Run screening before exporting a report.');
                 return;
             end
+            app.ExportButton.Enable = 'off';
+            app.ExportButton.Text = 'Exporting...';
+            app.setStatus('Rendering report...', t.text, t.amber);
+            drawnow;
+
+            % Same reason as the screening bar: report.generate blocks MATLAB
+            % inside exportgraphics, so the animation has to come from the
+            % uifigure front end rather than from a bar this code steps.
+            progress = uiprogressdlg(app.UIFigure, 'Title', 'Exporting report', ...
+                'Message', 'Rendering panels and writing the PDF.', ...
+                'Indeterminate', 'on', 'Cancelable', 'off');
+            failure = '';
             try
                 app.LastReport = report.generate(app.ScreeningResult, ...
                     'ResultsRoot', fullfile(app.ProjectRoot, 'results'));
-                [~, name, extension] = fileparts(char(app.LastReport.reportPath));
-                app.setStatus(sprintf('Report exported: %s%s', name, extension), ...
-                    t.text, t.green);
-                app.StatusValue.Tooltip = char(app.LastReport.reportPath);
             catch exception
-                app.showError(exception.message);
+                failure = exception.message;
             end
+            delete(progress);
+
+            app.ExportButton.Enable = 'on';
+            app.ExportButton.Text = 'Export report';
+            if ~isempty(failure)
+                app.showError(failure);
+                return;
+            end
+
+            [~, name, extension] = fileparts(char(app.LastReport.reportPath));
+            app.setStatus(sprintf('Report exported: %s%s', name, extension), ...
+                t.text, t.green);
+            app.StatusValue.Tooltip = char(app.LastReport.reportPath);
+            uialert(app.UIFigure, sprintf('%s\n\n%s', ...
+                'Report, four-panel figure, overlays and text companion written to:', ...
+                char(app.LastReport.resultsDirectory)), 'Report exported', ...
+                'Icon', 'success');
         end
 
         function showError(app, message)
