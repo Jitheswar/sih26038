@@ -104,7 +104,7 @@
     },
     "deferralRate": {
       "assumed": true,
-      "source": "SCENARIO VALUE, NOT THE MEASURED ONE. Retained at 0.10 as a planning figure for a decision policy that can act autonomously. Measured over the full validation split with eval/ablationHarness.m (configuration A5, the shipped pipeline, n=550, results/20260830_232525_ablation_A1_A5), autonomous coverage is 0.2745 and 399 of 550 cases escalate, so the measured deferral rate is 0.7255 (see measuredDeferralRate). Configuration A12, the agreement-check repair recommended in section 11.6 and not adopted, measures 0.3364. No measured configuration reaches 0.10, so any sweep run at that value models a hypothetical improved policy, not the system as it stands, and must be labelled that way when quoted. This supersedes the 24 Aug 2026 record of 1.00 from zero autonomous coverage, which was correct when taken and reflected the escalate-everything defect fixed in 02cebfa."
+      "source": "SCENARIO VALUE, NOT THE MEASURED ONE. Retained at 0.10 as a planning figure for a decision policy that can act autonomously. Measured over the full validation split with eval/ablationHarness.m (configuration A10, the shipped pipeline since 31 Aug 2026, n=550, results/20260830_232525_ablation_A1_A5), autonomous coverage is 0.3273 and 370 of 550 cases escalate, so the measured deferral rate is 0.6727 (see measuredDeferralRate). Configuration A12, the agreement-check repair recommended in section 11.6 and not adopted, measures 0.3364. No measured configuration reaches 0.10, so any sweep run at that value models a hypothetical improved policy, not the system as it stands, and must be labelled that way when quoted. This supersedes the 24 Aug 2026 record of 1.00 from zero autonomous coverage, which reflected the escalate-everything defect fixed in 02cebfa, and the 30 Aug 2026 record of 0.7255 from configuration A5, which shipped until A10 was adopted in ad2f120."
     },
     "turnaroundTargetHours": {
       "assumed": true,
@@ -124,8 +124,8 @@
     },
     "measuredDeferralRate": {
       "assumed": false,
-      "source": "Measured 30 Aug 2026 over the validation split (n=550) with eval/ablationHarness.m configuration A5, the shipped pipeline, at the frozen operating point. Autonomous coverage 151 of 550, 399 escalated, deferral rate 0.7255. Results: results/20260830_232525_ablation_A1_A5. Supersedes the 24 Aug 2026 value of 1.00, taken before the escalate-everything defect was fixed in 02cebfa. This is a record field and is not read by the model."
+      "source": "Measured 30 Aug 2026 over the validation split (n=550) with eval/ablationHarness.m configuration A10, the shipped pipeline since its adoption on 31 Aug 2026 in ad2f120, at the frozen operating point. Autonomous coverage 180 of 550, 370 escalated, deferral rate 0.6727. Results: results/20260830_232525_ablation_A1_A5. Supersedes two earlier figures: 1.00 on 24 Aug 2026, taken before the escalate-everything defect was fixed in 02cebfa, and 0.7255 on 30 Aug 2026 from configuration A5, which shipped until A10 was adopted. This is a record field and is not read by the model."
     }
   },
-  "measuredDeferralRate": 0.7255
+  "measuredDeferralRate": 0.6727
 }
