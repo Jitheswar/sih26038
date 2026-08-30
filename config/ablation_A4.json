@@ -12,7 +12,8 @@
     "enhancement": true,
     "lesion_evidence": false,
     "agreement_check": false,
-    "deferral": true
+    "deferral": true,
+    "learned_lesion_evidence": false
   },
   "preprocessing": {
     "output_type": "single",

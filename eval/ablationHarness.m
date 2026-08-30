@@ -199,6 +199,12 @@ for index = 1:numel(names)
     entry.lesionEvidence = logical(raw.pipeline.lesion_evidence);
     entry.agreementCheck = logical(raw.pipeline.agreement_check);
     entry.deferral = logical(raw.pipeline.deferral);
+    % Track B. Absent in A1-A5, which predate the learned lesion network, so
+    % it defaults false and those five keep measuring exactly what they
+    % measured before.
+    entry.learnedLesionEvidence = isfield(raw.pipeline, ...
+        'learned_lesion_evidence') && ...
+        logical(raw.pipeline.learned_lesion_evidence);
     entry.cacheKey = localCacheKey(entry.qualityGate, entry.enhancement);
 
     % The frozen model and threshold are not the ablated variable. Every
@@ -237,21 +243,23 @@ for keyIndex = 1:numel(keys)
     needCNN = any([members.usesCNN]);
     needDetection = any([members.lesionEvidence] | [members.agreementCheck]);
     needGradCAM = any([members.agreementCheck]);
+    needLearned = any([members.learnedLesionEvidence]);
 
     config = defaultConfig;
     config.pipeline = members(1).config.pipeline;
 
     fprintf(['Feature pass %d of %d [%s]: cnn=%d detection=%d gradcam=%d ' ...
-        '(serves %s)\n'], keyIndex, numel(keys), key, needCNN, ...
-        needDetection, needGradCAM, strjoin({members.id}, ' '));
+        'learned=%d (serves %s)\n'], keyIndex, numel(keys), key, needCNN, ...
+        needDetection, needGradCAM, needLearned, strjoin({members.id}, ' '));
 
     cache.(key) = localFeaturePass(split, config, checkpoint, frozen, ...
-        needCNN, needDetection, needGradCAM, projectRoot, options);
+        needCNN, needDetection, needGradCAM, needLearned, projectRoot, ...
+        options);
 end
 end
 
 function features = localFeaturePass(split, config, checkpoint, frozen, ...
-        needCNN, needDetection, needGradCAM, projectRoot, options)
+        needCNN, needDetection, needGradCAM, needLearned, projectRoot, options)
 n = split.n;
 features = struct();
 features.qualityClass = strings(n, 1);
@@ -275,6 +283,19 @@ features.qualityResults = cell(n, 1);
 features.spatiallyAgree = false(n, 1);
 features.gradCamAvailable = false(n, 1);
 features.evidenceSupportsCNN = false(n, 1);
+% Track B runs alongside Track A in the same pass rather than in a pass of
+% its own, so a configuration pair that differs only in which lesion channel
+% it reads shares one set of CNN inferences and one set of Grad-CAM maps.
+% Recomputing those per channel would make the comparison between the two
+% channels partly a comparison between two runs of everything else.
+features.learnedCandidateCount = nan(n, 1);
+features.learnedRuleLevel = nan(n, 1);
+features.learnedRuleReferable = false(n, 1);
+features.learnedRuleUncertain = true(n, 1);
+features.learnedRuleCaseUnknown = true(n, 1);
+features.learnedRuleResults = cell(n, 1);
+features.learnedSpatiallyAgree = false(n, 1);
+features.learnedEvidenceSupportsCNN = false(n, 1);
 features.failed = false(n, 1);
 
 reportEvery = max(1, floor(n / 20));
@@ -318,6 +339,33 @@ for index = 1:n
             end
         end
 
+        if needLearned
+            % The learned network runs on the original frame, not on
+            % processedImage: processedImage has been resized to the 448
+            % grading input, and §6.4 is explicit that a lesion is destroyed
+            % by exactly that resize. segment.segmentLesions does its own
+            % field-of-view scale normalisation from the native frame.
+            learnedEvidence = segment.lesionEvidence(image, ...
+                localLesionCheckpoint(config, projectRoot));
+            learnedDetection = localEvidenceDetection(learnedEvidence);
+            learnedRule = grade.icdrRule( ...
+                grade.icdrEvidenceFromLesionSegmentation(learnedEvidence, ...
+                detection));
+            features.learnedCandidateCount(index) = ...
+                learnedDetection.candidateCount;
+            features.learnedRuleResults{index} = learnedRule;
+            features.learnedRuleLevel(index) = learnedRule.level;
+            features.learnedRuleReferable(index) = learnedRule.referable;
+            features.learnedRuleUncertain(index) = learnedRule.uncertain;
+            features.learnedRuleCaseUnknown(index) = ...
+                learnedRule.caseUnknownEvidence;
+            if needCNN
+                features.learnedEvidenceSupportsCNN(index) = ...
+                    localEvidenceSupportsCNN(features.predictedLevel(index), ...
+                    learnedDetection, learnedRule);
+            end
+        end
+
         if needGradCAM && needCNN
             % WriteArtifacts false: only the returned maps are read, and
             % persisting 550 explanations costs about 24 GB.
@@ -326,6 +374,10 @@ for index = 1:n
             features.gradCamAvailable(index) = true;
             features.spatiallyAgree(index) = localSpatialAgreement( ...
                 gradCAMResult, detection);
+            if needLearned
+                features.learnedSpatiallyAgree(index) = ...
+                    localSpatialAgreement(gradCAMResult, learnedDetection);
+            end
         end
     catch exception
         features.failed(index) = true;
@@ -349,6 +401,23 @@ end
 
 function decisions = localComposeDecisions(entry, cache, split, frozen)
 features = cache.(entry.cacheKey);
+
+% A configuration that reads the learned lesion channel sees the learned
+% rule results wherever the rest of this function reads the classical ones.
+% Swapping them here rather than branching at every use keeps one decision
+% path: the ablated variable is which channel supplies the evidence, and
+% everything downstream of the evidence must stay identical for the
+% comparison to isolate that variable.
+if entry.learnedLesionEvidence
+    features.candidateCount = features.learnedCandidateCount;
+    features.ruleLevel = features.learnedRuleLevel;
+    features.ruleReferable = features.learnedRuleReferable;
+    features.ruleUncertain = features.learnedRuleUncertain;
+    features.ruleCaseUnknown = features.learnedRuleCaseUnknown;
+    features.ruleResults = features.learnedRuleResults;
+    features.spatiallyAgree = features.learnedSpatiallyAgree;
+    features.evidenceSupportsCNN = features.learnedEvidenceSupportsCNN;
+end
 n = split.n;
 
 decisions = struct();
@@ -661,6 +730,43 @@ end
 % FromDetection and grade.evidenceSupportsCNN, because two copies of the
 % evidence schema is precisely how this path drifts from the deployed one
 % while still passing its own tests.
+
+function checkpointPath = localLesionCheckpoint(config, projectRoot)
+%LOCALLESIONCHECKPOINT Resolve the Track B checkpoint named by the config.
+if ~isfield(config, 'lesion_segmentation') || ...
+        ~isfield(config.lesion_segmentation, 'checkpoint') || ...
+        isempty(config.lesion_segmentation.checkpoint)
+    error('eval:MissingLesionCheckpoint', ...
+        ['An ablation configuration enables learned_lesion_evidence but ' ...
+        'lesion_segmentation.checkpoint is not set.']);
+end
+checkpointPath = char(config.lesion_segmentation.checkpoint);
+if ~isfile(checkpointPath)
+    checkpointPath = fullfile(projectRoot, checkpointPath);
+end
+if ~isfile(checkpointPath)
+    error('eval:MissingLesionCheckpoint', ...
+        'Lesion checkpoint does not exist: %s', ...
+        char(config.lesion_segmentation.checkpoint));
+end
+end
+
+function detection = localEvidenceDetection(learnedEvidence)
+%LOCALEVIDENCEDETECTION Learned lesions in the shape the checks read.
+%   Mirrors app.runScreeningCase, so the ablation measures the deployed
+%   pipeline rather than a second implementation of it.
+lesionTypes = learnedEvidence.lesionTypes;
+coordinates = zeros(0, 2);
+for typeIndex = 1:numel(lesionTypes)
+    coordinates = [coordinates; ...
+        learnedEvidence.centroids.(lesionTypes{typeIndex})]; %#ok<AGROW>
+end
+detection = struct( ...
+    'candidateCount', size(coordinates, 1), ...
+    'candidateCoordinates', coordinates, ...
+    'candidateScores', ones(size(coordinates, 1), 1), ...
+    'evidenceSource', 'learned lesion segmentation');
+end
 
 function evidence = localICDREvidence(config, detection)
 if isfield(config, 'app') && isstruct(config.app) && isfield(config.app, 'icdrEvidence')

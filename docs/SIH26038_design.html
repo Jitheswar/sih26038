@@ -678,6 +678,17 @@ fovRadius = stats.EquivDiameter / 2;</code></pre>
 
 <p>Note the dependency structure this creates: vessel and disc segmentation are not independent deliverables, they are inputs that materially improve lesion precision. That interdependence is itself part of the R6.2 argument that the integrated pipeline beats any single technique &mdash; and it is measurable by running lesion detection with and without the vessel/disc suppression.</p>
 
+<h3>§6.4–§6.5 implementation &mdash; 30 August 2026</h3>
+<p>Track B is implemented. <code>segment.trainLesionSegmentation</code> trains one multi-label U-Net over the four lesion types at native-resolution 512&times;512 crops; <code>segment.segmentLesions</code> tiles a full frame through it; <code>segment.lesionEvidence</code> reduces the probability maps to discrete lesion counts and per-quadrant haemorrhage counts; and <code>grade.icdrEvidenceFromLesionSegmentation</code> maps those into the eight-field evidence structure <code>grade.icdrRule</code> already consumed. The split is <code>data/splits/lesion_{train,validation,test}.csv</code>, drawn once with seed 42 and committed: IDRiD Set-B is <code>lesion_test</code> in full and is neither trained on nor used to select an epoch.</p>
+<p>The loss is recall-weighted Tversky (&alpha;&nbsp;0.3, &beta;&nbsp;0.7) plus focal cross-entropy, and the configuration refuses to start if &beta;&nbsp;&lt;&nbsp;&alpha;. Measured over Set-A, lesion pixels occupy 0.107% of a frame for microaneurysms, 1.00% for haemorrhages, 0.81% for hard exudates and 0.39% for soft exudates <span class="tag v">Verified</span>, which is the imbalance the weighting exists to answer.</p>
+
+<div class="box warn">
+<h4>Capture scale is a transfer variable, and it is not small</h4>
+<p>A lesion network learns objects at the pixel scale of the frames it trained on. IDRiD is one camera at one protocol: measured over ten Set-A frames the illuminated field is <strong>3279 pixels across and varies by three pixels over the whole sample</strong> <span class="tag v">Verified</span>. APTOS is not one camera. Measured over twelve frames its field ranges from <strong>1055 to 2555 pixels</strong> <span class="tag v">Verified</span>, so the same physical lesion covers between a third and four fifths as many pixels there as the network was trained to expect.</p>
+<p>Feeding APTOS to an IDRiD-trained lesion network unchanged therefore asks it to find objects at a scale it never saw, and nothing in a per-frame output would report that it had happened. <code>segment.segmentLesions</code> resamples every frame so its field diameter matches <code>reference_fov_diameter</code> before tiling, and maps the probability maps back to the caller's pixel grid afterwards; the factor applied is recorded in the result metadata. For an IDRiD frame the factor is 1.00 and the step is a no-op, so the Set-B benchmark number below is unaffected by it.</p>
+<p>State the residual limitation rather than hiding behind the fix: resampling presents lesions at the learned scale, it does not create detail a 1050&times;1050 capture never recorded. A microaneurysm a few pixels across at IDRiD resolution is not present in that frame at any scale factor. This bounds what the microaneurysm head can achieve on the smaller APTOS captures, and it is a further reason &mdash; beyond &sect;6.4's &mdash; to keep the classical Track A detector in the pipeline.</p>
+</div>
+
 <h2>6.6 Neovascularisation (R2.6) &mdash; declared data gap</h2>
 
 <div class="box warn">
@@ -1248,6 +1259,26 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0"><strong>A3 reaches 0.0000 sensitivity by construction, not by accident.</strong> The ICDR rule engine receives one known field, microaneurysm count. Every criterion for Level 2 and above requires haemorrhages, exudates, venous beading or IRMA, all of which are unknown, so the rule can only ever return Level 0 or Level 1 and can never declare a case referable. The fully interpretable baseline is an evidence channel, not a grader, and this is the §6.6 data gap expressed as a metric.</p>
 </div>
 
+<h3>§11.6 measured results &mdash; 30 August 2026, A6 and A7, the learned lesion channel</h3>
+<p>A6 and A7 pair with A3 and A5 and differ from them in exactly one thing: which lesion channel supplies the ICDR evidence. Same frozen checkpoint, same frozen threshold, same 550 validation frames, one feature pass per cache key so both members of a pair share the same CNN inferences and Grad-CAM maps. Run with <code>eval/ablationHarness.m</code>; results: <code>results/20260830_144003_ablation_A1_A5</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Sensitivity (95% Wilson)</strong></td><td><strong>Specificity (95% Wilson)</strong></td><td><strong>Coverage</strong></td><td><strong>Missed referable</strong></td><td><strong>Decisions (clear / refer / escalate)</strong></td></tr>
+<tr><td>A3 &mdash; classical evidence, no CNN</td><td>0.0000 (0.0000&ndash;0.0169)</td><td>1.0000 (0.9884&ndash;1.0000)</td><td>1.000</td><td>223</td><td>550 / 0 / 0</td></tr>
+<tr><td>A6 &mdash; learned evidence, no CNN</td><td>1.0000 (0.9831&ndash;1.0000)</td><td>0.0000 (0.0000&ndash;0.0116)</td><td>1.000</td><td>0</td><td>0 / 550 / 0</td></tr>
+<tr><td>A5 &mdash; full pipeline, classical</td><td>0.0493 (0.0278&ndash;0.0862)</td><td>1.0000 (0.9884&ndash;1.0000)</td><td>0.275</td><td>1</td><td>140 / 11 / 399</td></tr>
+<tr><td>A7 &mdash; full pipeline, learned</td><td>0.1031 (0.0697&ndash;0.1500)</td><td>0.9939 (0.9780&ndash;0.9983)</td><td>0.045</td><td>0</td><td>0 / 25 / 525</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The two evidence channels fail in opposite directions, and neither is usable alone</h4>
+<p><strong>A3 against A6 is as clean a symmetry as this study produces.</strong> The classical channel auto-clears all 550 frames and misses all 223 referable cases: sensitivity 0.0000 at specificity 1.0000. The learned channel refers all 550 and misses none: sensitivity 1.0000 at specificity 0.0000. One channel cannot raise an alarm, the other cannot withhold one. A single-number summary would have scored these as equally poor while hiding that they are poor for opposite reasons, which is the case for reporting sensitivity and specificity separately at a stated operating point rather than an accuracy.</p>
+<p><strong>A5 against A7 is the more useful comparison, and it is not a straightforward win.</strong> A7 misses zero referable cases against A5's one, and doubles sensitivity, 0.1031 against 0.0493. It buys that by escalating 525 of 550 frames: coverage falls from 27.5% to <strong>4.5%</strong>. A screening aid that hands 95% of its caseload to the ophthalmologist has not reduced the bottleneck the system exists to reduce (§9.1). A7 is safer than A5 and less useful than A5, and both statements have to be reported together.</p>
+<p>This is consistent with the transfer measurement in §11.7: the learned channel over-detects on APTOS, so within the full pipeline the agreement check and the unexplained-prediction flag fire almost everywhere. The escalation is the decision layer behaving correctly on evidence it should not trust, not a fault in the decision layer.</p>
+<p><strong>These four rows are why <code>pipeline.learned_lesion_evidence</code> is <code>false</code>.</strong> The learned channel is the better localiser by a factor of five (§11.7) and the worse screening evidence source, at the thresholds currently available to it. Both are measured, both are reported, and the deployed configuration follows the screening number.</p>
+</div>
+
 <h2>11.7 Explanation quality metrics &mdash; the differentiator</h2>
 
 <p>Almost every team will show heatmaps. Very few will <strong>measure</strong> them. IDRiD's pixel-level lesion masks make quantitative evaluation possible, and this is the main reason IDRiD is in our pipeline at all.</p>
@@ -1263,6 +1294,54 @@ AGREEMENT      Rule path and CNN agree
 </tbody>
 </table>
 
+
+<h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
+<p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Pointing game</strong></td><td><strong>mean hit rate</strong></td><td><strong>median</strong></td><td><strong>lift over random</strong></td></tr>
+<tr><td>Grad-CAM</td><td>0.0863</td><td>0.0443</td><td>1.32&times;</td></tr>
+<tr><td>Lesion channel &mdash; classical candidates</td><td>0.0633</td><td>0.0225</td><td>0.96&times;</td></tr>
+<tr><td><strong>Lesion channel &mdash; learned segmentation</strong></td><td><strong>0.3197</strong></td><td><strong>0.2357</strong></td><td><strong>4.87&times;</strong></td></tr>
+<tr><td>Random control</td><td>0.0656</td><td>0.0197</td><td>1.00&times;</td></tr>
+</tbody>
+</table>
+<p>Held-out lesion segmentation quality on the same split, from <code>eval/lesionSegmentationEvaluation.m</code>, AUPR at 33 equally spaced thresholds over the pooled pixels of the split (<code>results/20260830_105445_lesion_test_evaluation</code>):</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Lesion type</strong></td><td><strong>AUPR</strong></td><td><strong>prevalence</strong></td><td><strong>AUPR / prevalence</strong></td></tr>
+<tr><td>Microaneurysms</td><td>0.4340</td><td>0.00098</td><td>442&times;</td></tr>
+<tr><td>Haemorrhages</td><td>0.2060</td><td>0.01066</td><td>19&times;</td></tr>
+<tr><td>Hard exudates</td><td>0.7550</td><td>0.01085</td><td>70&times;</td></tr>
+<tr><td>Soft exudates</td><td>0.0980</td><td>0.00181</td><td>54&times;</td></tr>
+<tr><td><strong>Mean</strong></td><td><strong>0.3732</strong></td><td>&mdash;</td><td>&mdash;</td></tr>
+</tbody>
+</table>
+<p>Validation mean AUPR at the selected epoch 17 was 0.3829 against a Set-B mean of 0.3732 <span class="tag v">Verified</span>. The two agree, so the epoch selection did not overfit the validation split.</p>
+
+<div class="box">
+<h4>What this changes, and what it does not</h4>
+<p><strong>The middle row of the 24 August table is fixed.</strong> The classical channel scored 0.96&times;, which is chance, and that reading was correct: as a localiser of graded lesions it carried no information. The learned channel reaches <strong>4.87&times;</strong> on the identical protocol, and is now the best-localising channel in the system by a wide margin &mdash; roughly 3.7 times Grad-CAM's 1.32&times;.</p>
+<p>That ordering is worth stating plainly, because it inverts the usual framing. <strong>Grad-CAM is the channel the problem statement mandates, and it is the weaker localiser of the two.</strong> §8.3 predicted exactly this and gave the reason: the final convolutional map is 14&times;14, which cannot localise a microaneurysm however faithful it is to the model. The learned channel segments at native resolution and is not bound by that limit. The right conclusion is not that Grad-CAM is broken &mdash; its deletion/insertion separation of +0.4881 says it is genuinely faithful to what the network used &mdash; but that <strong>faithfulness to the model and agreement with clinical ground truth are different properties</strong>, and the system now has a channel that is strong at each.</p>
+<p><strong>What it does not change.</strong> The classical channel stays in the pipeline. §6.4 requires it and the reason is unchanged: it needs no training data, so it cannot fail for want of it. The soft-exudate head is the weak one at 0.0980, trained on 21 frames, and should be read as the least trustworthy of the four. Level 4 remains unreachable from evidence alone, because IDRiD carries no neovascularisation masks &mdash; the declared §6.6 data gap, whose mitigation is that a Level 4 prediction always escalates to a human.</p>
+</div>
+
+<div class="box warn">
+<h4>The learned channel does not transfer to APTOS as an ICDR evidence source &mdash; measured, 30 August 2026</h4>
+<p>The result above is an <strong>in-domain</strong> result: IDRiD-trained, IDRiD-evaluated. Applying the same checkpoint to APTOS, which is what the deployed pipeline actually screens, fails, and it fails in a way worth recording precisely.</p>
+<p>Measured over ten APTOS validation frames, five of grade 0 and five of grade 4, running <code>segment.lesionEvidence</code> and <code>grade.icdrRule</code> at the per-type thresholds selected on the IDRiD validation split:</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>APTOS grade</strong></td><td><strong>haemorrhage count, range</strong></td><td><strong>ICDR level from evidence</strong></td><td><strong>called referable</strong></td></tr>
+<tr><td>0 (no retinopathy)</td><td>18 to 59</td><td>2 on all five</td><td>5 of 5</td></tr>
+<tr><td>4 (proliferative)</td><td>22 to 193</td><td>2 on four, 3 on one</td><td>5 of 5</td></tr>
+</tbody>
+</table>
+<p><strong>Ten of ten frames are called referable, including every healthy eye.</strong> Specificity from this channel on APTOS is 0.00 <span class="tag v">Verified</span>. There is some signal in the ordering &mdash; grade-4 frames carry more haemorrhages than grade-0 frames &mdash; but nothing that survives contact with the ICDR rules, because Level 2 fires on <em>any</em> known non-microaneurysm finding, so a count of 18 and a count of 193 produce the same level.</p>
+<p>Two causes, and they compound. The thresholds were chosen to maximise F1 on IDRiD, and a probability threshold does not carry across a distribution shift; and the ICDR criteria are written on counts, so a channel that is merely noisy rather than wrong still converts directly into a severity level. Field-of-view scale normalisation (§6.5) is necessary but not sufficient: it puts the lesions at the right size, and the frames here were resampled by 1.28&times; to 3.10&times; to achieve that, but it cannot make a 1050&times;1050 capture carry detail it never recorded.</p>
+<p><strong>Consequence, and it is a restriction, not a caveat.</strong> <code>pipeline.learned_lesion_evidence</code> stays <code>false</code> in <code>config/default.json</code>. The channel is validated as a <em>localiser on IDRiD</em>, which is the claim §11.7 makes and the only claim the measurements support; it is <strong>not</strong> validated as an ICDR evidence source on APTOS and must not be switched on for screening until its thresholds are re-selected against APTOS-domain data. That the pointing-game number is excellent and the screening number is unusable at the same time is precisely why both are reported.</p>
+<p>Note the symmetry with §11.6 A3. The classical channel calls nothing referable (sensitivity 0.0000); the learned channel on APTOS calls everything referable (specificity 0.00). Neither is usable alone, and neither failure would have been visible from a metric that did not separate the two.</p>
+</div>
 
 <h3>§11.7 measured results &mdash; 24 August 2026</h3>
 <p>Measured with <code>eval/explanationQuality.m</code> on the IDRiD segmentation testing set (n = 27 images carrying pixel lesion masks), against the frozen checkpoint. Top-5% most salient pixels; lesion pixels occupy 0.0659 of the frame on average, which is why a random control is reported beside every hit rate. Results: <code>results/20260824_042408_explanation_quality</code>.</p>
