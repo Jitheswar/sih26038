@@ -6,7 +6,7 @@
 #   ./start.sh            launch the screening GUI (default - use this for judges)
 #   ./start.sh demo       headless single-image run, prints the full decision trace
 #   ./start.sh numbers    print the frozen operating point and the headline results
-#   ./start.sh tests      run the full test suite (212 tests)
+#   ./start.sh tests      run the full test suite
 #   ./start.sh check      preflight only: verify MATLAB, model, calibration, data
 #
 # The Arch/Wayland environment variables below are documented in
@@ -155,10 +155,11 @@ preflight() {
     fi
 
     # Which evidence channel the demo will actually run. The learned channel
-    # is trained and is the better localiser by a wide margin, but 11.6 A9
-    # measured it escalating 512 of 550 frames, so the deployed configuration
-    # keeps the classical channel. A presenter asked "which one is live?"
-    # should not have to guess, and a judge who asks is asking a good question.
+    # escalated 512 of 550 frames in 11.6 A9 and was kept off for that
+    # reason; A10 then showed the agreement check, not the channel, was
+    # causing it, and the learned channel was adopted on 31 August 2026. A
+    # presenter asked "which one is live?" should not have to guess, and a
+    # judge who asks is asking a good question.
     local learned lesion_ckpt heads
     learned=$(python3 -c "import json;print(json.load(open('config/default.json'))['pipeline'].get('learned_lesion_evidence', False))" 2>/dev/null)
     if [[ "$learned" == "True" ]]; then
@@ -172,7 +173,7 @@ preflight() {
             failed=1
         fi
     else
-        ok "lesion evidence: classical candidate detector (learned channel off, 11.6 A9)"
+        ok "lesion evidence: classical candidate detector (learned channel off)"
     fi
 
     head2 "Demo data"
@@ -253,8 +254,11 @@ print(f"""
   The learned channel is the better localiser (4.87x pointing game vs 1.32x
   for Grad-CAM) and was still unusable as ICDR evidence until its thresholds
   were re-selected on the calibration split. Restricting it to its one
-  trustworthy head fixed the channel and barely moved the pipeline, so the
-  classical channel stays deployed. Both numbers are reported.
+  trustworthy head fixed the channel and barely moved the pipeline, which
+  looked like the channel's fault and was not: the agreement check was
+  escalating it for reaching ICDR Level 2 at all. Repairing that (A10,
+  adopted 31 August 2026) took autonomous coverage from 0.0691 to 0.3273
+  with zero referable patients sent home. Both numbers are reported.
 """)
 PY
     say "${DIM}Full metric set, confidence intervals and the ablation table are in${RESET}"

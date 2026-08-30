@@ -67,6 +67,20 @@ classdef ScreeningApp < handle
             app.applyDefaults(varargin{:});
         end
 
+        function showCase(app, imagePath)
+            %SHOWCASE Run and render one case without the file chooser.
+            %   Public so the render path can be exercised by a test and by a
+            %   scripted demo.  Everything below runScreening was private,
+            %   which made TestLauncher's note literally true: the GUI render
+            %   path was the one part of the demo no MATLAB test executed.
+            %   That is how a panel caption naming the wrong evidence channel
+            %   could have survived every green suite and first appeared in
+            %   front of a judge.
+            app.ImagePathField.Value = char(imagePath);
+            app.refreshCaseName();
+            app.runScreening();
+        end
+
         function delete(app)
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 delete(app.UIFigure);
