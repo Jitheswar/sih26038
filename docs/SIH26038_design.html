@@ -1295,6 +1295,36 @@ AGREEMENT      Rule path and CNN agree
 </table>
 
 
+<h3>§11.6 measured results - 30 August 2026, A8 and A9, the restricted lesion channel</h3>
+<p>A8 and A9 pair with A6 and A7 and differ in one thing: which trained heads are trusted as ICDR evidence, and at what thresholds. The restriction and its thresholds were selected on the calibration split (§11.7, 30 August); this table reads them out on validation. Run with <code>eval/ablationHarness.m</code>; results: <code>results/20260830_191216_ablation_A1_A5</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Sensitivity</strong></td><td><strong>Specificity</strong></td><td><strong>Coverage</strong></td><td><strong>Missed referable</strong></td><td><strong>clear / refer / escalate</strong></td></tr>
+<tr><td>A3 - classical evidence, no CNN</td><td>0.0000</td><td>1.0000</td><td>1.000</td><td>223</td><td>550 / 0 / 0</td></tr>
+<tr><td>A6 - learned evidence, all four heads, no CNN</td><td>1.0000</td><td>0.0000</td><td>1.000</td><td>0</td><td>0 / 550 / 0</td></tr>
+<tr><td><strong>A8 - learned evidence, hard exudates only, no CNN</strong></td><td><strong>0.8072</strong></td><td><strong>0.8257</strong></td><td>1.000</td><td>43</td><td>313 / 237 / 0</td></tr>
+<tr><td>A5 - full pipeline, classical</td><td>0.0493</td><td>1.0000</td><td>0.275</td><td>1</td><td>140 / 11 / 399</td></tr>
+<tr><td>A7 - full pipeline, learned, all four heads</td><td>0.1031</td><td>0.9939</td><td>0.045</td><td>0</td><td>0 / 25 / 525</td></tr>
+<tr><td><strong>A9 - full pipeline, learned, hard exudates only</strong></td><td><strong>0.1211</strong></td><td><strong>0.9939</strong></td><td><strong>0.069</strong></td><td>0</td><td>9 / 29 / 512</td></tr>
+</tbody>
+</table>
+
+<div class="box ok">
+<h4>The evidence channel is fixed</h4>
+<p>A6 against A8 is the clearest result in this study. The same network, the same frames, the same rule engine: trusting all four heads refers 550 of 550 and has specificity 0.0000; trusting only the hard-exudate head reaches 0.8072 sensitivity at 0.8257 specificity and auto-clears 313 frames. A channel that could not withhold an alarm now discriminates. <span class="tag v">Verified</span></p>
+<p>A8 reproduces the §11.7 read-out to four decimal places, 0.8072 and 0.8257, from a different code path: <code>eval/lesionThresholdTransfer.m</code> replays cached counts, <code>eval/ablationHarness.m</code> re-runs the network and composes decisions. Two independent paths agreeing exactly is the check that neither is measuring an artefact of its own bookkeeping. <span class="tag v">Verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>The pipeline is not, and this is the finding that matters</h4>
+<p>A9 against A7 is a much smaller gain than A8 against A6. Coverage rises from 0.045 to 0.069 and sensitivity from 0.1031 to 0.1211; the full pipeline still escalates 512 of 550 frames. Fixing the evidence channel did not fix the pipeline. <span class="tag v">Verified</span></p>
+<p>A9 against A5 is the comparison that decides deployment, and A5 still wins on the number the system exists to move. The classical channel handles 27.5 per cent of the caseload autonomously; the restricted learned channel handles 6.9 per cent. A screening aid that refers 93 per cent of its cases to the ophthalmologist has not reduced the bottleneck of §9.1, however good its evidence is in isolation.</p>
+<p>The cause is not the evidence channel any more. It is the agreement check: the learned evidence and the CNN disagree on most frames, so the unexplained-prediction flag fires and the decision layer escalates. That is the decision layer behaving correctly on two sources it cannot reconcile, and it means the next question is about the agreement check and the CNN, not about lesion thresholds. Restricting the heads moved the evidence channel from unusable to good and moved the pipeline barely at all, which is worth stating plainly because the first number alone would have read as a solved problem.</p>
+<p><strong>Consequence.</strong> <code>pipeline.learned_lesion_evidence</code> stays <code>false</code> in <code>config/default.json</code>. The deployed configuration follows coverage, and on coverage A5 remains the best measured pipeline.</p>
+</div>
+
+<p><strong>A cost the A8 row hides.</strong> Its per-class recall is [0.059, 0.304, 0.827, 0, 0]. Levels 3 and 4 are never returned, and neither is a detector failure. Level 3 is the 4-2-1 haemorrhage criterion, which needs the haemorrhage head that this configuration switches off, and Level 4 needs neovascularisation masks that IDRiD does not carry (§6.6). So the restricted channel can say "referable" and cannot say "severe" or "proliferative". For a referral endpoint that is acceptable and it is why sensitivity stays at 0.8072, but it narrows what the evidence can tell a clinician, and any future use of this channel for severity rather than referral has to restore the haemorrhage head first.</p>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">
@@ -1341,6 +1371,58 @@ AGREEMENT      Rule path and CNN agree
 <p>Two causes, and they compound. The thresholds were chosen to maximise F1 on IDRiD, and a probability threshold does not carry across a distribution shift; and the ICDR criteria are written on counts, so a channel that is merely noisy rather than wrong still converts directly into a severity level. Field-of-view scale normalisation (§6.5) is necessary but not sufficient: it puts the lesions at the right size, and the frames here were resampled by 1.28&times; to 3.10&times; to achieve that, but it cannot make a 1050&times;1050 capture carry detail it never recorded.</p>
 <p><strong>Consequence, and it is a restriction, not a caveat.</strong> <code>pipeline.learned_lesion_evidence</code> stays <code>false</code> in <code>config/default.json</code>. The channel is validated as a <em>localiser on IDRiD</em>, which is the claim §11.7 makes and the only claim the measurements support; it is <strong>not</strong> validated as an ICDR evidence source on APTOS and must not be switched on for screening until its thresholds are re-selected against APTOS-domain data. That the pointing-game number is excellent and the screening number is unusable at the same time is precisely why both are reported.</p>
 <p>Note the symmetry with §11.6 A3. The classical channel calls nothing referable (sensitivity 0.0000); the learned channel on APTOS calls everything referable (specificity 0.00). Neither is usable alone, and neither failure would have been visible from a metric that did not separate the two.</p>
+</div>
+
+<div class="box ok">
+<h4>The channel does transfer once the untrustworthy heads are dropped - measured, 30 August 2026</h4>
+<p>The restriction recorded immediately above named its own release condition: the channel "must not be switched on for screening until its thresholds are re-selected against APTOS-domain data". This is that re-selection, and it changes the conclusion. Run with <code>eval/lesionThresholdTransfer.m</code> over the <strong>calibration</strong> split, n = 365 (148 referable, 217 not). Counts: <code>results/20260830_153504_threshold_transfer_calibration</code>. Head-subset study: <code>results/20260830_160806_threshold_transfer_calibration</code>.</p>
+
+<p>The method runs the lesion network once per frame and records how many lesions of each type survive at each of fourteen thresholds, so the candidate operating points are swept without re-running inference. Thresholds are searched coordinate-wise, one head at a time, and the search is reported as coordinate-wise rather than dressed up as optimal.</p>
+
+<p><strong>First result: no threshold set rescues the four-head channel.</strong> The search pushed three of the four heads to the top of the grid and still reached only specificity 0.0737. The §11.7 finding above was measured on ten frames; it holds at 365. <span class="tag v">Verified</span></p>
+
+<p><strong>Second result, and the useful one: the channel is capped by its worst head, not by its thresholds.</strong> ICDR Level 2 fires on the <em>presence</em> of any non-microaneurysm finding, so the evidence channel ORs its heads together and its specificity cannot exceed that of the head that most often reports something on a healthy eye. Measured over the 217 non-referable calibration frames, the fraction whose count falls to zero:</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Head</strong></td><td><strong>cleared at 0.99</strong></td><td><strong>retained at 0.99</strong></td><td><strong>median count, grade 0</strong></td></tr>
+<tr><td>Hard exudates</td><td>0.8525</td><td>0.8243</td><td>0</td></tr>
+<tr><td>Microaneurysms</td><td>0.5207</td><td>0.9324</td><td>0</td></tr>
+<tr><td>Haemorrhages</td><td>0.4885</td><td>0.8041</td><td>1</td></tr>
+<tr><td><strong>Soft exudates</strong></td><td><strong>0.1290</strong></td><td>0.9595</td><td><strong>4</strong></td></tr>
+</tbody>
+</table>
+<p>At every threshold up to 0.975 the soft-exudate head clears under 2 per cent of healthy eyes, with a median of 46 lesions per grade-0 frame at 0.05. It is the head §11.7 already identified as the least trustworthy, at 0.0980 AUPR on 21 training frames, and it alone pins the channel. <span class="tag v">Verified</span></p>
+
+<p><strong>Head-subset study</strong>, every non-empty combination, thresholds searched per combination on the calibration split:</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Heads</strong></td><td><strong>Sensitivity</strong></td><td><strong>Specificity</strong></td><td><strong>Youden J</strong></td></tr>
+<tr><td><strong>EX</strong></td><td><strong>0.8243</strong></td><td><strong>0.8525</strong></td><td><strong>0.6769</strong></td></tr>
+<tr><td>HE+EX</td><td>0.9459</td><td>0.4424</td><td>0.3883</td></tr>
+<tr><td>HE</td><td>0.8041</td><td>0.4885</td><td>0.2925</td></tr>
+<tr><td>EX+SE</td><td>0.9797</td><td>0.1244</td><td>0.1042</td></tr>
+<tr><td>SE</td><td>0.9595</td><td>0.1290</td><td>0.0885</td></tr>
+<tr><td>MA+HE+EX+SE (all four, as shipped)</td><td>1.0000</td><td>0.0737</td><td>0.0737</td></tr>
+<tr><td>MA</td><td>0.0000</td><td>1.0000</td><td>0.0000</td></tr>
+</tbody>
+</table>
+<p>Adding MA to any set changes nothing, because microaneurysms alone cannot satisfy an ICDR criterion above Level 1. That row reproduces the §11.6 A3 result of 0.0000 sensitivity from an independent code path, which is the check that this harness measures what it claims to. <span class="tag v">Verified</span></p>
+
+<p><strong>Held-out read-out.</strong> The hard-exudate-only configuration was selected on calibration and then scored on the validation split with thresholds fixed, no search. Results: <code>results/20260830_161047_threshold_transfer_validation</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Validation split, n = 550</strong></td><td><strong>Sensitivity (95% Wilson)</strong></td><td><strong>Specificity (95% Wilson)</strong></td><td><strong>Youden J</strong></td></tr>
+<tr><td>IDRiD-selected, all four heads</td><td>1.0000 (0.9831-1.0000)</td><td>0.0000 (0.0000-0.0116)</td><td>0.0000</td></tr>
+<tr><td><strong>APTOS-selected, EX only at 0.99</strong></td><td><strong>0.8072 (0.7504-0.8536)</strong></td><td><strong>0.8257 (0.7809-0.8630)</strong></td><td><strong>0.6329</strong></td></tr>
+</tbody>
+</table>
+<p>Selection J on calibration was 0.6769 against a held-out 0.6329, a drop consistent with ordinary selection optimism and with overlapping intervals, so the configuration transfers rather than fitting the split it was chosen on. <span class="tag v">Verified</span></p>
+
+<p><strong>What this costs, stated plainly.</strong> Sensitivity falls from 1.0000 to 0.8072. The old number was not a capability: a channel that refers every frame has sensitivity 1.0000 by construction and cannot withhold an alarm. The new channel misses 43 of 223 referable frames on validation, and that is a real loss which the pipeline-level ablation, not this table, has to account for. 0.8072 is also below the R3.2 target of 0.90, which is the correct comparison to refuse: R3.2 is a whole-pipeline endpoint and this channel supplies evidence to the agreement check, it does not screen alone.</p>
+
+<p><strong>What this does not establish.</strong> The thresholds were selected on APTOS and read out on APTOS. Nothing here says they transfer to Messidor-2, and the sealed set stays sealed (§10.4). Level 4 remains unreachable from evidence alone, because IDRiD carries no neovascularisation masks (§6.6). Restricting to one head narrows the evidence the channel can offer a clinician: three of the four trained heads now contribute to localisation and the §11.7 pointing game, but not to the ICDR level.</p>
+
+<p><strong>Consequence.</strong> The trusted heads and their thresholds are now named in configuration rather than taken from the checkpoint, as <code>lesion_segmentation.evidence_heads</code> and <code>lesion_segmentation.evidence_thresholds</code>, honoured by both <code>eval/ablationHarness.m</code> and the deployed <code>app.runScreeningCase</code> path (§13.3). A head that is not trusted is dropped from the evidence and declared a capability gap, never reported as a per-case unknown, because <code>grade.icdrRule</code> escalates on a case-level unknown and a permanent restriction presented as one would escalate every patient (§8.5). Ablations <code>A8</code> and <code>A9</code> pair with A6 and A7 to measure the restricted channel at pipeline level; <code>pipeline.learned_lesion_evidence</code> stays <code>false</code> until that pair is read.</p>
 </div>
 
 <h3>§11.7 measured results &mdash; 24 August 2026</h3>

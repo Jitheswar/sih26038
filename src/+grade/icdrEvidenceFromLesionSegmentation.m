@@ -1,4 +1,5 @@
-function evidence = icdrEvidenceFromLesionSegmentation(lesionEvidence, detection)
+function evidence = icdrEvidenceFromLesionSegmentation(lesionEvidence, ...
+    detection, evidenceHeads)
 %ICDREVIDENCEFROMLESIONSEGMENTATION Build ICDR evidence from the learned net.
 %   EVIDENCE = grade.icdrEvidenceFromLesionSegmentation(LESIONEVIDENCE)
 %   turns the measurements from segment.lesionEvidence into the structured
@@ -7,6 +8,19 @@ function evidence = icdrEvidenceFromLesionSegmentation(lesionEvidence, detection
 %   DETECTION) additionally accepts the classical Track A detection, which
 %   supplies the microaneurysm count when the learned net was not trained
 %   with an MA head.
+%
+%   EVIDENCE = grade.icdrEvidenceFromLesionSegmentation(LESIONEVIDENCE,
+%   DETECTION, EVIDENCEHEADS) restricts the evidence to the named heads and
+%   declares the rest as capability gaps.  A head the network was trained
+%   for is not automatically a head its output can be trusted from: §11.7
+%   measured the soft-exudate head at 0.0980 AUPR on 21 training frames,
+%   and on APTOS it reports a median of 46 lesions on eyes graded 0.  Since
+%   ICDR Level 2 fires on the PRESENCE of any non-microaneurysm finding,
+%   the channel ORs its heads together and its specificity is bounded by
+%   the worst of them, so one untrustworthy head caps the whole channel
+%   whatever the others do.  Restricting the heads is therefore a
+%   correctness control, not a tuning knob, and it belongs in
+%   configuration rather than in this file (§13.3).
 %
 %   What this changes, against grade.icdrEvidenceFromDetection:
 %
@@ -35,6 +49,9 @@ function evidence = icdrEvidenceFromLesionSegmentation(lesionEvidence, detection
 if nargin < 2
     detection = [];
 end
+if nargin < 3
+    evidenceHeads = {};
+end
 if ~isstruct(lesionEvidence) || ~isscalar(lesionEvidence) || ...
         ~isfield(lesionEvidence, 'counts')
     error('grade:InvalidLesionEvidence', ...
@@ -44,6 +61,25 @@ end
 
 lesionTypes = lesionEvidence.lesionTypes;
 counts = lesionEvidence.counts;
+
+% A head that is not trusted is dropped from lesionTypes rather than
+% reported with an unknown value. That distinction is load-bearing:
+% grade.icdrRule escalates on a case-level unknown, so presenting a
+% permanent, every-image restriction as a per-case unknown would escalate
+% every patient and disable the triage the system exists to perform.
+if ~isempty(evidenceHeads)
+    if ischar(evidenceHeads)
+        evidenceHeads = {evidenceHeads};
+    end
+    trusted = ismember(lesionTypes, evidenceHeads);
+    if ~any(trusted)
+        error('grade:NoTrustedLesionHeads', ...
+            ['None of the configured evidence heads (%s) are present in ' ...
+            'the lesion evidence (%s).'], strjoin(evidenceHeads, ', '), ...
+            strjoin(lesionTypes(:)', ', '));
+    end
+    lesionTypes = lesionTypes(trusted);
+end
 
 unknownLogical = struct('value', [], 'known', false);
 

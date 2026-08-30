@@ -154,6 +154,27 @@ preflight() {
         failed=1
     fi
 
+    # Which evidence channel the demo will actually run. The learned channel
+    # is trained and is the better localiser by a wide margin, but 11.6 A9
+    # measured it escalating 512 of 550 frames, so the deployed configuration
+    # keeps the classical channel. A presenter asked "which one is live?"
+    # should not have to guess, and a judge who asks is asking a good question.
+    local learned lesion_ckpt heads
+    learned=$(python3 -c "import json;print(json.load(open('config/default.json'))['pipeline'].get('learned_lesion_evidence', False))" 2>/dev/null)
+    if [[ "$learned" == "True" ]]; then
+        lesion_ckpt=$(python3 -c "import json;print(json.load(open('config/default.json'))['lesion_segmentation']['checkpoint'])" 2>/dev/null)
+        heads=$(python3 -c "import json;d=json.load(open('config/default.json'))['lesion_segmentation'];print('+'.join(d.get('evidence_heads') or d['lesion_types']))" 2>/dev/null)
+        if [[ -n "$lesion_ckpt" && -f "$lesion_ckpt" ]]; then
+            ok "lesion evidence: learned segmentation, heads $heads"
+            ok "lesion checkpoint: $lesion_ckpt"
+        else
+            bad "learned_lesion_evidence is on but its checkpoint is missing: $lesion_ckpt"
+            failed=1
+        fi
+    else
+        ok "lesion evidence: classical candidate detector (learned channel off, 11.6 A9)"
+    fi
+
     head2 "Demo data"
     local n
     n=$(ls data/raw/aptos2019/train_images/*.png 2>/dev/null | wc -l)
@@ -206,6 +227,12 @@ show_numbers() {
 import json
 c = json.load(open('config/default.json'))
 op = c.get('operating_point', {})
+lesion = c.get('lesion_segmentation', {})
+if c.get('pipeline', {}).get('learned_lesion_evidence'):
+    heads = lesion.get('evidence_heads') or lesion.get('lesion_types', [])
+    live = 'learned segmentation, heads ' + '+'.join(heads)
+else:
+    live = 'classical candidate detector'
 print(f"""
   Frozen operating point            {op.get('referable_threshold')}  (frozen {op.get('frozen_on')})
   Temperature (calibration)         {op.get('temperature')}
@@ -217,6 +244,17 @@ print(f"""
 
   Both targets are met at the frozen threshold on internal validation.
   The sealed external set (Messidor-2) has NOT been opened.
+
+  LESION EVIDENCE CHANNEL
+    Live in this demo                {live}
+    Learned channel, all four heads  sensitivity 1.0000 / specificity 0.0000  (A6)
+    Learned channel, exudates only   sensitivity 0.8072 / specificity 0.8257  (A8)
+
+  The learned channel is the better localiser (4.87x pointing game vs 1.32x
+  for Grad-CAM) and was still unusable as ICDR evidence until its thresholds
+  were re-selected on the calibration split. Restricting it to its one
+  trustworthy head fixed the channel and barely moved the pipeline, so the
+  classical channel stays deployed. Both numbers are reported.
 """)
 PY
     say "${DIM}Full metric set, confidence intervals and the ablation table are in${RESET}"

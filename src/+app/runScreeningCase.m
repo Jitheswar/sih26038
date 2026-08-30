@@ -341,7 +341,7 @@ if isfield(config, 'app') && isstruct(config.app) && ...
 end
 if nargin >= 3 && ~isempty(learnedLesionEvidence)
     evidence = grade.icdrEvidenceFromLesionSegmentation( ...
-        learnedLesionEvidence, detection);
+        learnedLesionEvidence, detection, localEvidenceHeads(config));
     return;
 end
 evidence = grade.icdrEvidenceFromDetection(detection);
@@ -381,7 +381,61 @@ if ~isfile(checkpointPath)
         char(config.lesion_segmentation.checkpoint));
 end
 
-learnedLesionEvidence = segment.lesionEvidence(image, checkpointPath);
+learnedLesionEvidence = segment.lesionEvidence(image, checkpointPath, ...
+    'Thresholds', localEvidenceThresholds(config));
+end
+
+
+function thresholds = localEvidenceThresholds(config)
+%LOCALEVIDENCETHRESHOLDS Per-head operating thresholds named by the config.
+%   Empty falls back to the checkpoint's own thresholds, which maximise
+%   pixel F1 on IDRiD.  §11.7 measured that those do not transfer to APTOS,
+%   so a deployed configuration is expected to name its own, re-selected on
+%   the calibration split.
+thresholds = [];
+if ~isfield(config, 'lesion_segmentation')
+    return;
+end
+lesion = config.lesion_segmentation;
+if ~isfield(lesion, 'evidence_thresholds') || isempty(lesion.evidence_thresholds)
+    return;
+end
+lesionTypes = lesion.lesion_types;
+if ischar(lesionTypes)
+    lesionTypes = {lesionTypes};
+end
+requested = lesion.evidence_thresholds;
+thresholds = zeros(numel(lesionTypes), 1);
+for index = 1:numel(lesionTypes)
+    lesionType = lesionTypes{index};
+    if ~isfield(requested, lesionType)
+        error('app:MissingEvidenceThreshold', ...
+            ['lesion_segmentation.evidence_thresholds names no threshold ' ...
+            'for head %s. Refusing to fall back to a default for one head ' ...
+            'while honouring the configuration for the others.'], lesionType);
+    end
+    thresholds(index) = double(requested.(lesionType));
+end
+end
+
+
+function heads = localEvidenceHeads(config)
+%LOCALEVIDENCEHEADS Which lesion heads the configuration trusts as evidence.
+%   Empty means every trained head.  §11.7 measured why this is not the
+%   same question as which heads the network was trained for.
+heads = {};
+if ~isfield(config, 'lesion_segmentation')
+    return;
+end
+lesion = config.lesion_segmentation;
+if ~isfield(lesion, 'evidence_heads') || isempty(lesion.evidence_heads)
+    return;
+end
+heads = lesion.evidence_heads;
+if ischar(heads)
+    heads = {heads};
+end
+heads = cellstr(heads);
 end
 
 function detection = localEvidenceDetection(candidateDetection, ...

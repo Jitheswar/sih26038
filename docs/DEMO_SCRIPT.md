@@ -246,6 +246,34 @@ That is why the detector is a cross-check and not the grader.
 If a judge presses on it, that is a good thing.
 The answer is that the agreement check between Grad-CAM and the classical detector is currently too strict, the escalation rate is the metric that shows it, and the fix is a calibrated agreement threshold rather than a binary one.
 
+**We then went and tested that answer.**
+This is the strongest thing on the slide, so do not rush it.
+Open `results/20260830_191216_ablation_A1_A5/ablation_table.csv`.
+
+| Config | What it is | Sensitivity | Specificity | Coverage |
+| --- | --- | --- | --- | --- |
+| A6 | Learned lesion channel, all four heads, no CNN | 1.000 | 0.000 | 1.00 |
+| A8 | Learned lesion channel, hard exudates only, no CNN | 0.807 | 0.826 | 1.00 |
+| A7 | Full pipeline, learned channel, all four heads | 0.103 | 0.994 | 0.045 |
+| A9 | Full pipeline, learned channel, hard exudates only | 0.121 | 0.994 | 0.069 |
+
+> We trained a lesion segmentation network, and it was our best explanation channel by a wide margin: 4.87 times chance at pointing at real lesions, against 1.32 for Grad-CAM.
+> It was also completely unusable as evidence. It called all 550 validation images referable, including every healthy eye. Specificity zero.
+> The thresholds had been chosen to maximise pixel accuracy on the dataset it was trained on, and they did not survive the move to a different camera population.
+> So we swept every threshold on a split we had held back for exactly this, and found that no threshold rescues it.
+> The reason is structural: the ICDR rules fire on the presence of a finding, so the channel is only as specific as its worst head, and one head was reporting 46 lesions on a median healthy eye.
+> We switched that head off. Specificity went from 0.00 to 0.83 on held-out data.
+
+Then deliver the part that matters.
+
+> And it barely helped the pipeline. Coverage went from 4.6 percent to 6.9 percent. It still escalates 512 of 550.
+> That is the same conclusion as A5, from a completely different direction: the bottleneck is the agreement check, not the evidence.
+> We predicted that, then we measured it, and the measurement agreed. That is why we are confident about what to fix next.
+
+If a judge asks why you are showing them a fix that did not work, that is the whole point.
+
+> Because the channel-level number on its own would have read as a solved problem, and it is not one.
+
 ---
 
 ## 9. The Simulink district model, 60 seconds

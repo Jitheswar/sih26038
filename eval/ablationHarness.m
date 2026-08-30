@@ -205,7 +205,8 @@ for index = 1:numel(names)
     entry.learnedLesionEvidence = isfield(raw.pipeline, ...
         'learned_lesion_evidence') && ...
         logical(raw.pipeline.learned_lesion_evidence);
-    entry.cacheKey = localCacheKey(entry.qualityGate, entry.enhancement);
+    entry.cacheKey = localCacheKey(entry.qualityGate, entry.enhancement, ...
+        entry.learnedLesionEvidence, raw);
 
     % The frozen model and threshold are not the ablated variable. Every
     % configuration inherits them so the comparison is like for like.
@@ -221,8 +222,30 @@ for index = 1:numel(names)
 end
 end
 
-function key = localCacheKey(qualityGate, enhancement)
+function key = localCacheKey(qualityGate, enhancement, learnedEvidence, config)
+%LOCALCACHEKEY Identify feature passes that can legitimately be shared.
+%   A pass is shared by every configuration whose extracted features would
+%   be identical, so anything that changes a feature has to appear in the
+%   key. The trusted lesion heads and their thresholds change the learned
+%   evidence directly, so two configurations that disagree about them need
+%   separate passes even when their preprocessing matches - otherwise the
+%   first one's evidence would be silently reused for the second.
 key = sprintf('qg%d_enh%d', qualityGate, enhancement);
+if ~learnedEvidence
+    return;
+end
+heads = localEvidenceHeads(config);
+if isempty(heads)
+    heads = {'all'};
+end
+thresholds = localEvidenceThresholds(config);
+if isempty(thresholds)
+    thresholdText = 'checkpoint';
+else
+    thresholdText = mat2str(thresholds(:)', 4);
+end
+key = matlab.lang.makeValidName(sprintf('%s_le_%s_%s', key, ...
+    strjoin(heads, '-'), thresholdText));
 end
 
 % ------------------------------------------------------- feature extraction
@@ -247,6 +270,14 @@ for keyIndex = 1:numel(keys)
 
     config = defaultConfig;
     config.pipeline = members(1).config.pipeline;
+    % The learned-evidence settings must come from the ablation
+    % configuration rather than the default. Without this every
+    % configuration in a pass would inherit the default's trusted heads and
+    % thresholds, which would quietly rewrite what A6 and A7 measured the
+    % moment the default gained an evidence_heads key.
+    if isfield(members(1).config, 'lesion_segmentation')
+        config.lesion_segmentation = members(1).config.lesion_segmentation;
+    end
 
     fprintf(['Feature pass %d of %d [%s]: cnn=%d detection=%d gradcam=%d ' ...
         'learned=%d (serves %s)\n'], keyIndex, numel(keys), key, needCNN, ...
@@ -345,12 +376,19 @@ for index = 1:n
             % grading input, and §6.4 is explicit that a lesion is destroyed
             % by exactly that resize. segment.segmentLesions does its own
             % field-of-view scale normalisation from the native frame.
+            % Operating thresholds and trusted heads come from the
+            % configuration, not the checkpoint, when the configuration
+            % names them. The checkpoint's own thresholds maximise pixel F1
+            % on IDRiD and do not transfer to APTOS (§11.7); a
+            % configuration that has re-selected them on the calibration
+            % split says so here rather than by editing code (§13.3).
             learnedEvidence = segment.lesionEvidence(image, ...
-                localLesionCheckpoint(config, projectRoot));
+                localLesionCheckpoint(config, projectRoot), ...
+                'Thresholds', localEvidenceThresholds(config));
             learnedDetection = localEvidenceDetection(learnedEvidence);
             learnedRule = grade.icdrRule( ...
                 grade.icdrEvidenceFromLesionSegmentation(learnedEvidence, ...
-                detection));
+                detection, localEvidenceHeads(config)));
             features.learnedCandidateCount(index) = ...
                 learnedDetection.candidateCount;
             features.learnedRuleResults{index} = learnedRule;
@@ -730,6 +768,58 @@ end
 % FromDetection and grade.evidenceSupportsCNN, because two copies of the
 % evidence schema is precisely how this path drifts from the deployed one
 % while still passing its own tests.
+
+function thresholds = localEvidenceThresholds(config)
+%LOCALEVIDENCETHRESHOLDS Per-head operating thresholds named by the config.
+%   Returns [] when the configuration does not name them, which makes
+%   segment.lesionEvidence fall back to the checkpoint's IDRiD-selected
+%   values. A1-A7 predate this key and therefore keep measuring exactly
+%   what they measured before.
+thresholds = [];
+if ~isfield(config, 'lesion_segmentation')
+    return;
+end
+lesion = config.lesion_segmentation;
+if ~isfield(lesion, 'evidence_thresholds') || isempty(lesion.evidence_thresholds)
+    return;
+end
+lesionTypes = lesion.lesion_types;
+if ischar(lesionTypes)
+    lesionTypes = {lesionTypes};
+end
+requested = lesion.evidence_thresholds;
+thresholds = zeros(numel(lesionTypes), 1);
+for index = 1:numel(lesionTypes)
+    lesionType = lesionTypes{index};
+    if ~isfield(requested, lesionType)
+        error('eval:MissingEvidenceThreshold', ...
+            ['lesion_segmentation.evidence_thresholds names no threshold ' ...
+            'for head %s. Refusing to fall back to a default for one head ' ...
+            'while honouring the configuration for the others.'], lesionType);
+    end
+    thresholds(index) = double(requested.(lesionType));
+end
+end
+
+
+function heads = localEvidenceHeads(config)
+%LOCALEVIDENCEHEADS Which lesion heads the configuration trusts as evidence.
+%   Empty means every trained head, which is the pre-existing behaviour.
+heads = {};
+if ~isfield(config, 'lesion_segmentation')
+    return;
+end
+lesion = config.lesion_segmentation;
+if ~isfield(lesion, 'evidence_heads') || isempty(lesion.evidence_heads)
+    return;
+end
+heads = lesion.evidence_heads;
+if ischar(heads)
+    heads = {heads};
+end
+heads = cellstr(heads);
+end
+
 
 function checkpointPath = localLesionCheckpoint(config, projectRoot)
 %LOCALLESIONCHECKPOINT Resolve the Track B checkpoint named by the config.

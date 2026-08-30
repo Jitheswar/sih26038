@@ -42,28 +42,17 @@ areas = struct();
 
 for typeIndex = 1:typeCount
     lesionType = lesionTypes{typeIndex};
-    mask = prediction.probabilityMaps(:, :, typeIndex) >= thresholds(typeIndex);
-
-    % Discard components below the minimum plausible size for the type.
-    % Without this a single stray pixel counts as one haemorrhage, and the
-    % Level 3 criterion is a threshold on haemorrhage COUNT, so noise at the
-    % pixel level converts directly into a severity level.
-    if minimumArea(typeIndex) > 1
-        mask = bwareaopen(mask, minimumArea(typeIndex));
-    end
-
-    components = bwconncomp(mask);
-    properties = regionprops(components, 'Centroid', 'Area');
-    if isempty(properties)
-        centroidList = zeros(0, 2);
-        areaList = zeros(0, 1);
-    else
-        centroidList = reshape([properties.Centroid], 2, []).';
-        areaList = [properties.Area].';
-    end
+    % Thresholding, the minimum-area filter and the component count live in
+    % segment.countLesionType, because the threshold-transfer sweep needs
+    % exactly this step over a grid of candidate thresholds and must not
+    % reimplement it.  One code path, two callers.
+    [componentCount, centroidList, areaList, mask] = ...
+        segment.countLesionType( ...
+            prediction.probabilityMaps(:, :, typeIndex), ...
+            thresholds(typeIndex), minimumArea(typeIndex));
 
     binaryMasks(:, :, typeIndex) = mask;
-    counts.(lesionType) = components.NumObjects;
+    counts.(lesionType) = componentCount;
     centroids.(lesionType) = centroidList;
     areas.(lesionType) = areaList;
 end
@@ -169,11 +158,9 @@ end
 
 function minimumArea = localResolveMinimumArea(requested, lesionTypes)
 %LOCALRESOLVEMINIMUMAREA Smallest component size kept, per lesion type.
-%   The defaults follow the physical scale of each lesion at the IDRiD
-%   capture resolution.  Microaneurysms are the smallest object the pipeline
-%   looks for and §3.2 warns they sit near the resolution limit, so their
-%   floor is deliberately low; haemorrhages and exudates are larger and a
-%   component of a handful of pixels is far more likely to be noise.
+%   An explicit request wins; otherwise the per-type defaults come from
+%   segment.defaultLesionMinimumArea, which carries the rationale and is
+%   shared with the threshold-transfer sweep.
 
 typeCount = numel(lesionTypes);
 if isnumeric(requested)
@@ -188,14 +175,5 @@ if isnumeric(requested)
     return;
 end
 
-defaults = struct('MA', 3, 'HE', 10, 'EX', 10, 'SE', 20);
-minimumArea = zeros(typeCount, 1);
-for typeIndex = 1:typeCount
-    lesionType = lesionTypes{typeIndex};
-    if isfield(defaults, lesionType)
-        minimumArea(typeIndex) = defaults.(lesionType);
-    else
-        minimumArea(typeIndex) = 1;
-    end
-end
+minimumArea = segment.defaultLesionMinimumArea(lesionTypes);
 end

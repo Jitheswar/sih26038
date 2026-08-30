@@ -1,0 +1,127 @@
+{
+  "ablation": {
+    "id": "A9",
+    "configuration": "Full pipeline with learned lesion segmentation, hard exudates only",
+    "establishes": "Paired with A7 it measures what restricting the evidence channel to its one trustworthy head does to the complete pipeline, and paired with A5 it measures what the trained channel adds once so restricted.",
+    "uses_cnn": true,
+    "source": "docs/SIH26038_design.html \u00a711.6",
+    "note": "Identical to A7 in every respect except which trained heads are trusted as ICDR evidence and at what thresholds. The thresholds were selected on the calibration split and never on validation or test."
+  },
+  "pipeline": {
+    "quality_gate": true,
+    "enhancement": true,
+    "lesion_evidence": true,
+    "agreement_check": true,
+    "deferral": true,
+    "learned_lesion_evidence": true
+  },
+  "preprocessing": {
+    "output_type": "single",
+    "channel_mean": [
+      0,
+      0,
+      0
+    ],
+    "channel_std": [
+      0.00392156862745098,
+      0.00392156862745098,
+      0.00392156862745098
+    ]
+  },
+  "grading": {
+    "backbone": "resnet50",
+    "input_size": 448,
+    "head": "softmax",
+    "num_classes": 5,
+    "batch_size": 16,
+    "seed": 42,
+    "dropout": 0.5
+  },
+  "augmentation": {
+    "rotation": true,
+    "flips": true,
+    "scale_jitter": [
+      0.85,
+      1.0
+    ],
+    "brightness_shift": 10,
+    "contrast_gain": [
+      0.9,
+      1.1
+    ]
+  },
+  "class_balancing": {
+    "method": "inverse_frequency",
+    "oversampling": true
+  },
+  "data": {
+    "dataset": "APTOS"
+  },
+  "operating_point": {
+    "referable_threshold": 0.4,
+    "frozen_on": "2026-08-23",
+    "applies_to": "decision_policy.autoClearThreshold",
+    "applies_to_note": "autoClearThreshold is the only gate that can send a patient home, so it alone governs screening sensitivity. referableThreshold splits refer vs escalate and does not affect sensitivity.",
+    "temperature": 2.1414,
+    "model": "results/20260823_184930/epoch_08.mat",
+    "calibration": "results/20260823_204608",
+    "validation_sensitivity": 0.9821,
+    "validation_specificity": 0.9174
+  },
+  "decision_policy": {
+    "referableThreshold": 0.7,
+    "autoClearThreshold": 0.4,
+    "uncertaintyThreshold": 0.5,
+    "requireEvidenceForAutoClear": true,
+    "alwaysEscalateLevel4": true,
+    "escalateOnUnknownEvidence": true,
+    "escalateOnExplanationDisagreement": true,
+    "escalateOnCapabilityGap": false
+  },
+  "lesion_segmentation": {
+    "enabled": true,
+    "lesion_types": [
+      "MA",
+      "HE",
+      "EX",
+      "SE"
+    ],
+    "patch_size": 512,
+    "patches_per_image": 24,
+    "lesion_patch_fraction": 0.75,
+    "shuffle_buffer_images": 8,
+    "fov_downsample": 8,
+    "batch_size": 4,
+    "max_epochs": 30,
+    "learning_rate": 0.001,
+    "base_filters": 32,
+    "encoder_depth": 4,
+    "tversky_alpha": 0.3,
+    "tversky_beta": 0.7,
+    "focal_gamma": 2.0,
+    "early_stopping_patience": 8,
+    "aupr_thresholds": 33,
+    "tile_overlap": 64,
+    "scale_normalisation": true,
+    "reference_fov_diameter": 3279,
+    "scale_limits": [
+      0.25,
+      4
+    ],
+    "checkpoint": "results/20260830_093848_lesion_segmentation/best_lesion_model.mat",
+    "seed": 42,
+    "smoke_epochs": 1,
+    "smoke_images": 2,
+    "smoke_patches_per_image": 2,
+    "smoke_batch_size": 2,
+    "evidence_heads": [
+      "EX"
+    ],
+    "evidence_thresholds": {
+      "MA": 0.05,
+      "HE": 0.99,
+      "EX": 0.99,
+      "SE": 0.99
+    }
+  }
+}

@@ -36,6 +36,28 @@ This matters because it fixes the measured weak point of the pipeline.
 The classical candidate channel scored a pointing-game lift of 0.96x (chance) in §11.7 and 0.0000 sensitivity in the §11.6 A3 ablation, because counting microaneurysms can never satisfy an ICDR criterion above Level 1.
 The learned channel takes ICDR evidence coverage from one of eight fields to four, which makes Levels 2 and 3 reachable from evidence alone.
 
+The learned channel's operating thresholds have been re-selected against APTOS, and the result changed which heads the pipeline trusts.
+The thresholds shipped in the checkpoint maximise pixel F1 on IDRiD, and on APTOS they call every frame referable: specificity 0.0000 on the validation split, n = 550.
+Sweeping all fourteen thresholds per head over the calibration split (n = 365) showed that no threshold set rescues the four-head channel, and the separation diagnostic showed why.
+ICDR Level 2 fires on the presence of any non-microaneurysm finding, so the channel ORs its heads together and its specificity is bounded by whichever head most often reports something on a healthy eye.
+That head is soft exudates, which clears under 2 per cent of eyes graded 0 at every threshold up to 0.975.
+
+Restricting the evidence to the hard-exudate head at threshold 0.99 gives, on the held-out validation split with the thresholds fixed and no search:
+
+| Configuration | Sensitivity (95% Wilson) | Specificity (95% Wilson) |
+| --- | --- | --- |
+| IDRiD-selected, all four heads | 1.0000 (0.9831-1.0000) | 0.0000 (0.0000-0.0116) |
+| APTOS-selected, hard exudates only | 0.8072 (0.7504-0.8536) | 0.8257 (0.7809-0.8630) |
+
+Sensitivity falls because the old number was not a capability: a channel that refers every frame scores 1.0000 by construction and can never withhold an alarm.
+The new channel misses 43 of 223 referable frames, which is a real cost and is accounted for at pipeline level by ablations A8 and A9 rather than by this table.
+Which heads are trusted and at what thresholds is now named in `config/default.json` as `lesion_segmentation.evidence_heads` and `evidence_thresholds`, not taken from the checkpoint.
+
+Fixing the evidence channel did not fix the pipeline, and that is the more important result.
+At pipeline level (ablations A8 and A9, validation split, n = 550) the restricted channel raises autonomous coverage only from 4.6 per cent to 6.9 per cent, because the agreement check still cannot reconcile the learned evidence with the CNN and escalates 512 of 550 frames.
+The classical channel (A5) still handles 27.5 per cent of the caseload autonomously, so it remains the best measured pipeline on the number the system exists to move, and `pipeline.learned_lesion_evidence` stays `false`.
+The next question is about the agreement check and the CNN, not about lesion thresholds.
+
 The sealed external test set (Messidor-2, `data/sealed/`) has not been opened. All development to date - architecture, hyperparameters, thresholds, calibration - used only the train / validation / calibration splits. It is opened once, by the human key-holder, after the operating point is frozen and dated, and any result from it is reported alongside the internal numbers rather than replacing them.
 IDRiD Set-B is not the sealed set; it is an ordinary held-out split, never trained on and never used to select an epoch.
 
@@ -44,7 +66,7 @@ This is a screening aid and research prototype, not a medical device or a clinic
 ## Repository layout
 
 ```
-config/    default.json (frozen run configuration) and ablation_A1..A7.json
+config/    default.json (frozen run configuration) and ablation_A1..A9.json
 data/      PROVENANCE.md, patient-level splits and IDRiD lesion splits (data/splits/), sealed external set (data/sealed/, not read)
 src/       MATLAB packages: +quality +segment +grade +explain +report +common +data
 simulink/  district_model.slx and the capacity sweep experiments
@@ -69,6 +91,12 @@ Train the lesion segmentation network on IDRiD Set-A:
 
 ```bash
 matlab -batch "addpath(genpath('src')); segment.trainLesionSegmentation('config/default.json')"
+```
+
+Re-select the lesion evidence thresholds against APTOS on the calibration split, and run the head-subset study:
+
+```bash
+matlab -batch "addpath(genpath('src')); addpath(genpath('eval')); lesionThresholdTransfer()"
 ```
 
 Score a lesion checkpoint on the held-out IDRiD Set-B benchmark split:
@@ -107,6 +135,7 @@ Image Processing, Computer Vision, Deep Learning, Medical Imaging, Statistics an
 - **Input resolution is 448x448 minimum**; 224x224 destroys microaneurysm evidence.
 - **Lesion segmentation trains on native-resolution crops and never on a resized frame.** The resize is exactly what removes the microaneurysms the network is being trained to find. At inference each frame is instead resampled so its field-of-view diameter matches the training scale, because capture scale differs between datasets by up to 3x.
 - **The lesion loss weights false negatives above false positives** (Tversky, beta > alpha), and the configuration refuses to start otherwise. Lesion pixels are 0.1 to 1.0 per cent of a frame, so a symmetric objective reaches an excellent value by predicting all background.
+- **A head the network was trained for is not automatically a head its output can be trusted from.** Which heads supply ICDR evidence, and at what thresholds, is named in `config/default.json`, because ICDR Level 2 fires on the presence of any non-microaneurysm finding and one untrustworthy head therefore caps the specificity of the whole evidence channel. An untrusted head is declared a capability gap, never reported as a per-case unknown, because the rule engine escalates on a per-case unknown and a permanent restriction presented as one would escalate every patient.
 - **Bare accuracy is never reported.** Sensitivity and specificity are reported at the frozen operating point with 95% Wilson intervals and stated n; softmax output is not confidence, so temperature-scaled probabilities are reported with ECE and a reliability diagram.
 
 Full detail and rationale for every rule above is in `docs/SIH26038_design.html`; `AGENTS.md` has the equivalent guidance for agents working in this repository.

@@ -96,6 +96,15 @@
       4
     ],
     "checkpoint": "results/20260830_093848_lesion_segmentation/best_lesion_model.mat",
+    "evidence_heads": [
+      "EX"
+    ],
+    "evidence_thresholds": {
+      "MA": 0.05,
+      "HE": 0.99,
+      "EX": 0.99,
+      "SE": 0.99
+    },
     "seed": 42,
     "smoke_epochs": 1,
     "smoke_images": 2,
