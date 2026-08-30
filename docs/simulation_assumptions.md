@@ -21,23 +21,41 @@ The JSON configuration keeps required parameters as numeric or string fields so 
 `parameterMetadata.<field>.assumed` is the authoritative marker for whether a value is measured.
 Values marked `assumed: true` must not be presented as measured project values.
 
-Currently measured project values: none of the required capacity-model inputs have been frozen from the quality-gate evaluation, actual screening-pipeline benchmark, evaluation harness, decision-policy risk-coverage curve, or reader study.
+Currently measured project values: inference time, model sensitivity, model specificity and the measured deferral rate are frozen from project measurements and are marked `assumed: false`.
+Every other required input is a scenario assumption or a placeholder and remains marked `assumed: true`.
 The annual volume and simulation horizon are planning inputs from R5.2 and are not clinical measurements.
 
 The quality rejection rate of `0.21` is a clearly labelled placeholder.
 The 21 percent field result described in the design document is external context and is not treated as a measurement from this project.
 
-Inference time is a placeholder until the actual screening pipeline is benchmarked on target hardware.
-Model sensitivity and specificity are placeholders until the evaluation harness produces a frozen operating point.
-Deferral rate has now been measured, and the configured value is deliberately not the measured one.
+Inference time of `0.715` seconds is measured, not assumed.
+It is the median per-case time over the validation split (n = 550) on an RTX 3050 6 GB laptop GPU, measured 24 August 2026 with `eval/fullMetricReport.m`, and it covers the whole per-case path including the quality gate and preprocessing rather than the forward pass alone.
+Target-hardware figures will differ, because this is a laptop-class GPU.
 
-Measured over the full validation split on 24 August 2026 with `eval/ablationHarness.m` configuration A5 at the frozen operating point, autonomous coverage is 0 of 550 cases.
-Every case escalates to human review, so the measured deferral rate is `1.00`, recorded as `measuredDeferralRate` in the district config.
-`grade.decisionPolicy` raises `required-evidence-unknown`, `unknown-neovascularisation-status`, `candidate-evidence-provisional` and `rule-engine-recommends-escalation` on every image while the only evidence source is classical microaneurysm candidate detection, and those codes force escalation before any threshold is consulted.
-The configured `deferralRate` of `0.10` is retained as a scenario value describing a decision policy that can act autonomously.
-The current pipeline is not that policy, so any sweep run at `0.10` models a hypothetical improved system and must be labelled that way whenever its numbers are quoted.
+Model sensitivity and specificity are measured, not assumed.
+They are the internal test split values at the operating point frozen on 23 August 2026: sensitivity `0.9600` (72 of 75) and specificity `0.9167` (99 of 108), both with 95% Wilson intervals recorded in the parameter metadata.
+
 Grader service time is a placeholder until the reader study reports service time.
 Capture time, quality-gate time, image size, bandwidth, connectivity availability, retry interval, PHC count, prevalence, camp multiplier, and the turnaround target are scenario assumptions.
+
+### Deferral rate
+
+The deferral rate is measured, and the configured value is deliberately not the measured one.
+
+Measured over the full validation split on 30 August 2026 with `eval/ablationHarness.m` configuration A5, the shipped pipeline, at the frozen operating point: autonomous coverage is 151 of 550 cases and 399 escalate, so the measured deferral rate is `0.7255`.
+That value is recorded as `measuredDeferralRate` in the district config, which is a record field and is not read by the model.
+Results: `results/20260830_232525_ablation_A1_A5`.
+
+This supersedes the figure recorded here on 24 August 2026, a deferral rate of `1.00` from an autonomous coverage of 0 of 550.
+That measurement was correct when it was taken and is no longer the behaviour of the pipeline.
+At the time, `grade.decisionPolicy` raised `required-evidence-unknown`, `unknown-neovascularisation-status`, `candidate-evidence-provisional` and `rule-engine-recommends-escalation` on every image, and those codes forced escalation before any threshold was consulted.
+That defect was fixed in commit `02cebfa`.
+
+Configuration A12, the agreement-check repair recommended in the design document at §11.6 and not adopted, measures a deferral rate of `0.3364` from an autonomous coverage of 365 of 550.
+It is recorded here because it is the deferral rate the model would need if that recommendation is adopted, and it is not the rate of the pipeline as it currently ships.
+
+The configured `deferralRate` of `0.10` is retained as a scenario value describing a decision policy that can act autonomously.
+No measured configuration reaches it, so any sweep run at `0.10` models a hypothetical improved system and must be labelled that way whenever its numbers are quoted.
 
 `maximumRecaptureAttempts` is a project policy value of two.
 `arrivalRate` is derived from annual volume and the simulation horizon.
