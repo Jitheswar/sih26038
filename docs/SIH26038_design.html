@@ -1259,6 +1259,26 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0"><strong>A3 reaches 0.0000 sensitivity by construction, not by accident.</strong> The ICDR rule engine receives one known field, microaneurysm count. Every criterion for Level 2 and above requires haemorrhages, exudates, venous beading or IRMA, all of which are unknown, so the rule can only ever return Level 0 or Level 1 and can never declare a case referable. The fully interpretable baseline is an evidence channel, not a grader, and this is the §6.6 data gap expressed as a metric.</p>
 </div>
 
+<h3>§11.6 measured results &mdash; 30 August 2026, A6 and A7, the learned lesion channel</h3>
+<p>A6 and A7 pair with A3 and A5 and differ from them in exactly one thing: which lesion channel supplies the ICDR evidence. Same frozen checkpoint, same frozen threshold, same 550 validation frames, one feature pass per cache key so both members of a pair share the same CNN inferences and Grad-CAM maps. Run with <code>eval/ablationHarness.m</code>; results: <code>results/20260830_144003_ablation_A1_A5</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Sensitivity (95% Wilson)</strong></td><td><strong>Specificity (95% Wilson)</strong></td><td><strong>Coverage</strong></td><td><strong>Missed referable</strong></td><td><strong>Decisions (clear / refer / escalate)</strong></td></tr>
+<tr><td>A3 &mdash; classical evidence, no CNN</td><td>0.0000 (0.0000&ndash;0.0169)</td><td>1.0000 (0.9884&ndash;1.0000)</td><td>1.000</td><td>223</td><td>550 / 0 / 0</td></tr>
+<tr><td>A6 &mdash; learned evidence, no CNN</td><td>1.0000 (0.9831&ndash;1.0000)</td><td>0.0000 (0.0000&ndash;0.0116)</td><td>1.000</td><td>0</td><td>0 / 550 / 0</td></tr>
+<tr><td>A5 &mdash; full pipeline, classical</td><td>0.0493 (0.0278&ndash;0.0862)</td><td>1.0000 (0.9884&ndash;1.0000)</td><td>0.275</td><td>1</td><td>140 / 11 / 399</td></tr>
+<tr><td>A7 &mdash; full pipeline, learned</td><td>0.1031 (0.0697&ndash;0.1500)</td><td>0.9939 (0.9780&ndash;0.9983)</td><td>0.045</td><td>0</td><td>0 / 25 / 525</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The two evidence channels fail in opposite directions, and neither is usable alone</h4>
+<p><strong>A3 against A6 is as clean a symmetry as this study produces.</strong> The classical channel auto-clears all 550 frames and misses all 223 referable cases: sensitivity 0.0000 at specificity 1.0000. The learned channel refers all 550 and misses none: sensitivity 1.0000 at specificity 0.0000. One channel cannot raise an alarm, the other cannot withhold one. A single-number summary would have scored these as equally poor while hiding that they are poor for opposite reasons, which is the case for reporting sensitivity and specificity separately at a stated operating point rather than an accuracy.</p>
+<p><strong>A5 against A7 is the more useful comparison, and it is not a straightforward win.</strong> A7 misses zero referable cases against A5's one, and doubles sensitivity, 0.1031 against 0.0493. It buys that by escalating 525 of 550 frames: coverage falls from 27.5% to <strong>4.5%</strong>. A screening aid that hands 95% of its caseload to the ophthalmologist has not reduced the bottleneck the system exists to reduce (§9.1). A7 is safer than A5 and less useful than A5, and both statements have to be reported together.</p>
+<p>This is consistent with the transfer measurement in §11.7: the learned channel over-detects on APTOS, so within the full pipeline the agreement check and the unexplained-prediction flag fire almost everywhere. The escalation is the decision layer behaving correctly on evidence it should not trust, not a fault in the decision layer.</p>
+<p><strong>These four rows are why <code>pipeline.learned_lesion_evidence</code> is <code>false</code>.</strong> The learned channel is the better localiser by a factor of five (§11.7) and the worse screening evidence source, at the thresholds currently available to it. Both are measured, both are reported, and the deployed configuration follows the screening number.</p>
+</div>
+
 <h2>11.7 Explanation quality metrics &mdash; the differentiator</h2>
 
 <p>Almost every team will show heatmaps. Very few will <strong>measure</strong> them. IDRiD's pixel-level lesion masks make quantitative evaluation possible, and this is the main reason IDRiD is in our pipeline at all.</p>
