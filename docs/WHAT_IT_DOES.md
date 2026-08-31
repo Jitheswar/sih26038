@@ -1,7 +1,6 @@
 # What this program does, in plain English
 
 This is the "what is it" document.
-The click-by-click demo walkthrough is a separate file, `docs/DEMO_SCRIPT.md`.
 
 ---
 
