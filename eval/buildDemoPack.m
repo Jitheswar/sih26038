@@ -5,7 +5,7 @@ function result = buildDemoPack(varargin)
 %   point, exports each one's annotated report, and writes an index.
 %
 %   Name-value options:
-%     'OutputDir'  Demo root (default ~/sih-demo).
+%     'OutputDir'  Demo root (default ~/sih-demo-cases).
 %     'Limit'      Build only the first N cases.  Pilot runs only.
 %
 %   This runs the same entry point the demo UI runs, `app.runScreeningCase`,
@@ -35,7 +35,10 @@ config = jsondecode(fileread(configPath));
 checkpointPath = fullfile(projectRoot, config.operating_point.model);
 temperature = config.operating_point.temperature;
 
-caseRoot = fullfile(options.outputDir, 'cases');
+% The case folders sit directly in the demo folder rather than under a
+% further 'cases' level, so the folder a presenter opens is the folder that
+% holds the twelve cases.
+caseRoot = options.outputDir;
 if ~isfolder(caseRoot)
     mkdir(caseRoot);
 end
@@ -242,7 +245,7 @@ end
 
 function options = localOptions(varargin)
 parser = inputParser();
-parser.addParameter('OutputDir', fullfile(getenv('HOME'), 'sih-demo'));
+parser.addParameter('OutputDir', fullfile(getenv('HOME'), 'sih-demo-cases'));
 parser.addParameter('Limit', 0);
 parser.parse(varargin{:});
 

@@ -143,7 +143,7 @@ Claiming the downstream benefit before it is measured is exactly what §11.1 exi
 
 ## Demo pack
 
-`~/sih-demo` holds twelve real validation cases, one for each behaviour the pipeline can show, with the full annotated report exported for each.
+`~/sih-demo-cases` holds twelve real validation cases, one for each behaviour the pipeline can show, with the full annotated report exported for each.
 The cases are chosen by `eval/selectDemoCases.m`, which queries the recorded per-case decision of the ablation run reported in §11.6, so what each case demonstrates is measured rather than assumed.
 `eval/buildDemoPack.m` then runs each one through `app.runScreeningCase`, the same entry point the demo UI uses, and reports where the deployed path and the harness disagree.
 On the current build all twelve agree.
@@ -151,6 +151,9 @@ On the current build all twelve agree.
 ```bash
 matlab -batch "addpath(genpath('src')); addpath('eval'); selectDemoCases(); buildDemoPack()"
 ```
+
+The twelve are chosen to be mechanically distinct rather than merely to look different, and the list is matched on the reason code the policy raised, because that is what the report prints and what a judge asks about.
+The quality gate is among them: it is the first stage of the pipeline and the one a rural capture actually stresses, and an earlier version of this list ran twelve cases without showing it once.
 
 One scenario in that list is unreachable and worth knowing about: `decision_policy.alwaysEscalateLevel4` means no case can ever be auto-referred at ICDR Level 4, because proliferative disease always goes to a human.
 
