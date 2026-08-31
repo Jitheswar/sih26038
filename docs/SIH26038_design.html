@@ -1651,14 +1651,14 @@ AGREEMENT      Rule path and CNN agree
   "operating_point": { "referable_threshold": null, "frozen_on": null }
 }</code></pre>
 
-<h2>13.4 Working with AI coding assistants</h2>
+<h2>13.4 Working at a fast, scripted pace</h2>
 
-<p>The build is driven through Claude Code by two people. That is a legitimate strategy and MATLAB supports it well, since <code>matlab -batch "statement"</code> runs headlessly, logs to stdout and stderr, and exits non-zero on failure <span class="tag v">Verified</span> &mdash; which is exactly the loop an agent needs. Two failure modes need explicit countermeasures.</p>
+<p>The build runs through headless, scripted MATLAB by two people. That is a legitimate strategy and MATLAB supports it well, since <code>matlab -batch "statement"</code> runs headlessly, logs to stdout and stderr, and exits non-zero on failure <span class="tag v">Verified</span> &mdash; which is exactly the loop fast iteration needs. Two failure modes need explicit countermeasures.</p>
 
 <table>
 <thead><tr><th style="width:30%">Failure mode</th><th>Countermeasure</th></tr></thead>
 <tbody>
-<tr><td><strong>Silent training failure.</strong> A model that collapses to the majority class raises no error. The agent reports success. Loss curves look fine.</td><td><strong>Build <code>eval/harness.m</code> before the first model.</strong> Make per-class recall and the confusion matrix print on every validation epoch. Add a unit test asserting that no class has zero recall on a smoke-test run. This is the single most important engineering practice in this document.</td></tr>
+<tr><td><strong>Silent training failure.</strong> A model that collapses to the majority class raises no error. A quick run reports success. Loss curves look fine.</td><td><strong>Build <code>eval/harness.m</code> before the first model.</strong> Make per-class recall and the confusion matrix print on every validation epoch. Add a unit test asserting that no class has zero recall on a smoke-test run. This is the single most important engineering practice in this document.</td></tr>
 <tr><td><strong>Inability to defend the work.</strong> At judging &mdash; and during the finale's live build with mentor checkpoints &mdash; you will be asked why a choice was made, not who typed it.</td><td><strong>This document is the countermeasure.</strong> Every decision here carries its reason. Rithviksai reads §1&ndash;§3, §11 and §17 closely, and the "design rationale" notes in §5&ndash;§9.</td></tr>
 </tbody>
 </table>
@@ -1828,7 +1828,7 @@ A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
 <thead><tr><th style="width:26%">Workstream</th><th style="width:20%">Owner</th><th>Notes</th></tr></thead>
 <tbody>
 <tr><td>Presentation and defence</td><td><strong>Rithviksai</strong></td><td>Must be present in every design conversation, not handed slides at the end</td></tr>
-<tr><td>ML pipeline (C1&ndash;C4)</td><td>Build pair</td><td>Driven through Claude Code; harness-first discipline per §13.4</td></tr>
+<tr><td>ML pipeline (C1&ndash;C4)</td><td>Build pair</td><td>Scripted, headless MATLAB; harness-first discipline per §13.4</td></tr>
 <tr><td>SimEvents model (C5)</td><td>Assignable to a non-ML member</td><td>No GPU, no data, no ML. High visibility. Start day one.</td></tr>
 <tr><td>Data curation and provenance</td><td>Assignable to a non-ML member</td><td>Access requests, §10.3 provenance log, quality-tier labelling</td></tr>
 <tr><td>Clinician liaison</td><td>Any member</td><td>One email, then scheduling. Owns §12.</td></tr>
