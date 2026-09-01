@@ -139,6 +139,42 @@ classdef TestRunScreeningCase < matlab.unittest.TestCase
                 fullfile(fileparts(configPath), 'data', 'sealed', 'image.png'), ...
                 checkpointPath, calibrationPath, configPath), 'app:SealedData');
         end
+
+        function limitationsAgreeWithTheEvidenceActuallyUsed(testCase)
+            % Regression test. The limitations block and the ICDR rule trace
+            % are printed in the same report, and used to contradict each
+            % other: limitations said "No learned lesion segmentation is
+            % used." while the trace on the same page said the evidence came
+            % from learned lesion segmentation. A reader has no way to tell
+            % which half to believe, so assert they cannot disagree.
+            %
+            % Written to follow whichever channel the config selects, so it
+            % keeps checking the real invariant if the default config changes.
+            [imagePath, checkpointPath, calibrationPath, configPath] = ...
+                TestRunScreeningCase.inputs();
+            result = app.runScreeningCase(imagePath, checkpointPath, ...
+                calibrationPath, configPath);
+
+            limitationsText = strjoin(result.limitations, newline);
+            evidenceSource = char(result.icdrRuleResult.evidenceSource);
+            usedLearnedSegmentation = contains(lower(evidenceSource), ...
+                'learned lesion segmentation');
+
+            if usedLearnedSegmentation
+                testCase.verifyFalse( ...
+                    contains(limitationsText, ...
+                        'No learned lesion segmentation is used.'), ...
+                    ['The report states that no learned lesion segmentation ', ...
+                    'is used, but the evidence source for this case was: ', ...
+                    evidenceSource]);
+                testCase.verifySubstring(limitationsText, ...
+                    'not clinically validated');
+            else
+                testCase.verifySubstring(limitationsText, ...
+                    'No learned lesion segmentation is used.');
+            end
+        end
+
     end
 
     methods (Static, Access = private)

@@ -150,7 +150,11 @@ result.threeWayDecision = threeWayDecision;
 result.agreementStatus = threeWayDecision.agreementStatus;
 result.reportMetadata = localCompletedReportMetadata(result, config, imagePath);
 result.warnings = localWarnings(icdrRuleResult, threeWayDecision);
-result.limitations = localLimitations();
+if isempty(learnedLesionEvidence)
+    result.limitations = localLimitations();
+else
+    result.limitations = localLimitations(icdrEvidence.evidenceSource);
+end
 end
 
 function result = localBaseResult(originalImage, processedImage, imagePath, ...
@@ -553,9 +557,27 @@ if strcmp(decision.decision, 'escalate')
 end
 end
 
-function limitations = localLimitations()
+function limitations = localLimitations(learnedSegmentationSource)
+%LOCALLIMITATIONS Limitations text for the report.
+%   LEARNEDSEGMENTATIONSOURCE is the evidence source description when the
+%   learned lesion segmentation contributed to this case, and is omitted or
+%   empty when it did not.
+%
+%   The first entry has to follow what actually ran. Stating that no learned
+%   lesion segmentation is used, on a case whose rule trace in the same report
+%   reads "Received evidence source: learned lesion segmentation (EX)", is a
+%   contradiction a reader is entitled to trust the wrong half of. The entry
+%   was written before the learned channel existed and stopped being true once
+%   the config could enable it.
+if nargin < 1 || isempty(learnedSegmentationSource)
+    segmentationLimitation = 'No learned lesion segmentation is used.';
+else
+    segmentationLimitation = sprintf( ...
+        ['Lesion evidence came from %s, which is not clinically ', ...
+        'validated lesion segmentation.'], char(learnedSegmentationSource));
+end
 limitations = { ...
-    'No learned lesion segmentation is used.', ...
+    segmentationLimitation, ...
     'No MC dropout or final clinical validation is implemented.', ...
     'Classical candidate evidence is provisional and not clinically validated lesion segmentation.', ...
     'This prototype has no CDSCO clearance and must not be used for clinical decision-making.', ...
