@@ -112,6 +112,35 @@ The grade CSV's contents were not read or opened as part of this move, consisten
 
 A regression test, `tests/TestSealedDataProtection.m`, asserts this and asserts that the pipeline's existing sealed-path guards (in `app.runScreeningCase`, `explain.gradcam`, `grade.fitTemperature`, and `report.generate`) reject paths under `data/sealed/`.
 
+### MESSIDOR-2 image set, recorded 2026-09-01
+
+The image release is obtained separately from ADCIS and had never had a checksum recorded.
+
+That omission is why previously reported sealed-set numbers could not be shown to be reproducible on a new machine.
+
+A replacement copy was obtained on 2026-09-01 and its checksums are recorded here so the gap does not recur.
+
+- Supplied as four split parts, `IMAGES.zip.001` through `IMAGES.zip.004`.
+- Combined size: 2,455,185,147 bytes.
+- Combined SHA-256, over `cat IMAGES.zip.001 IMAGES.zip.002 IMAGES.zip.003 IMAGES.zip.004`: `bf665275db889e1f6d68641fae1bc074a62ec1a5083637c902dc309cd95f99e9`.
+
+| Part | Bytes | SHA-256 |
+|---|---:|---|
+| `IMAGES.zip.001` | 734,003,200 | `f5ee401078ab2a857744d30571155829e6f79aa321aa2900aa4e1d825082d5d3` |
+| `IMAGES.zip.002` | 734,003,200 | `54d8ba72d07e7842e7abf3304b50d4aa4b5afc48fc47baf2158d6ce700ab5c17` |
+| `IMAGES.zip.003` | 734,003,200 | `b4ae5052a557edb33184ac92176906745a28fdb573a347fcd662e123820ee030` |
+| `IMAGES.zip.004` | 253,175,547 | `7bc91ae9a9cda42c1fda22c9fb65ccd32f176292975bd77c330d63fa15e23eac` |
+
+The combined hash matches the 16-character prefix `bf665275db889e1f` that the migration log recorded for the original `IMAGES.zip`.
+
+This copy is therefore the same image set the earlier sealed evaluation ran on.
+
+Consistent with S10.4, no archive member was extracted or read while recording these hashes.
+
+An accompanying `messidor-2.csv` (38,423 bytes) was supplied alongside the parts and was moved under seal unread.
+
+It is not the same file as `messidor2_grades/messidor_data.csv`, which comes from the Kaggle grade-metadata archive.
+
 ## APTOS class distribution
 
 The counts below were independently recomputed from `data/raw/aptos2019/train.csv` with MATLAB using the `diagnosis` column.
@@ -128,6 +157,20 @@ The exact total is 3,662 labelled training images.
 | **Total** |  | **3,662** | **100%** | **100%** |
 
 The five counts sum to 3,662.
+
+## Extraction layout
+
+Every archive except APTOS unpacks directly into `data/raw/` rather than into a per-dataset subdirectory.
+
+The split files in `data/splits/` hard-code these paths and `src/+grade/private/loadSplitData.m` asserts on them, so extracting to a tidier layout silently breaks the splits.
+
+| Archive | Unpacks to |
+|---|---|
+| `aptos2019-blindness-detection.zip` | `data/raw/aptos2019/`. The archive root holds `train_images/`, `test_images/` and three CSVs, so it must be extracted into a directory named `aptos2019`. |
+| `A. Segmentation.zip` | `data/raw/A. Segmentation/` |
+| `B. Disease Grading.zip` | `data/raw/B. Disease Grading/` |
+| `C. Localization.zip` | `data/raw/C. Localization/` |
+| `DRIVE.zip` | Holds `training.zip` and `test.zip`, which unpack to `data/raw/training/` and `data/raw/test/`. The vessel splits draw both train and test frames from `data/raw/training/`. |
 
 ## Reproduction commands
 
