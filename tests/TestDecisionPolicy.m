@@ -291,9 +291,106 @@ classdef TestDecisionPolicy < matlab.unittest.TestCase
             testCase.verifyDecision(result, 'escalate');
             testCase.verifyTrue(ismember('cnn-level-4', result.reasonCodes));
         end
+
+        function findingKindsRunParallelToReasonCodes(testCase)
+            % findingKinds names what each reason code is, so it has to line
+            % up with reasonCodes entry for entry or the naming is worse than
+            % no naming at all.
+            input = TestDecisionPolicy.input(4, 0.99);
+            input.quality.class = 'ungradable';
+            input.ruleEngine = TestDecisionPolicy.cappedRule(1);
+            result = grade.decisionPolicy(input, TestDecisionPolicy.config());
+
+            testCase.verifyNumElements(result.findingKinds, ...
+                numel(result.reasonCodes));
+            testCase.verifyTrue(iscellstr(result.findingKinds)); %#ok<ISCLSTR>
+            testCase.verifyTrue(all(ismember(result.findingKinds, ...
+                {'safety exception', 'advisory finding', 'capability gap'})));
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'cnn-level-4'), 'safety exception');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'quality-ungradable'), 'safety exception');
+        end
+
+        function advisoryFindingAndCapabilityGapAreDistinguishable(testCase)
+            % The bucket this splits.  An advisory finding says something
+            % about this image; a capability gap says something about this
+            % build and is true of every image.  A reader who cannot tell
+            % them apart cannot tell "this image's attention was odd" from
+            % "no detector in this build produces that field".
+            config = TestDecisionPolicy.config();
+            config.decisionPolicy.escalateOnExplanationDisagreement = false;
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            input.explanation.gradCamAndLesionEvidenceSpatiallyAgree = false;
+
+            result = grade.decisionPolicy(input, config);
+
+            testCase.verifyDecision(result, 'auto-clear');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'explanation-spatially-inconsistent'), 'advisory finding');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'candidate-evidence-provisional'), 'advisory finding');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'evidence-capability-gap'), 'capability gap');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'unknown-neovascularisation-status'), 'capability gap');
+        end
+
+        function escalateOnCapabilityGapPromotesOnlyCapabilityGaps(testCase)
+            % escalateOnCapabilityGap is the maximally conservative policy
+            % for the build-level gaps.  Whether an advisory finding
+            % escalates is a different question, governed by
+            % escalateOnExplanationDisagreement, and this flag must not
+            % answer it too.
+            config = TestDecisionPolicy.config();
+            config.decisionPolicy.escalateOnExplanationDisagreement = false;
+            config.decisionPolicy.escalateOnCapabilityGap = true;
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine = TestDecisionPolicy.cappedRule(0);
+            input.explanation.gradCamAndLesionEvidenceSpatiallyAgree = false;
+
+            result = grade.decisionPolicy(input, config);
+
+            testCase.verifyDecision(result, 'escalate');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'evidence-capability-gap'), 'safety exception');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'explanation-spatially-inconsistent'), 'advisory finding');
+        end
+
+        function anAdvisoryFindingAloneNeverForcesEscalation(testCase)
+            % The same case with the capability gaps removed.  Nothing here
+            % is a fact that disqualifies the decision, so the advisory
+            % findings are reported and the case is still decided.
+            config = TestDecisionPolicy.config();
+            config.decisionPolicy.escalateOnExplanationDisagreement = false;
+            config.decisionPolicy.escalateOnCapabilityGap = true;
+            input = TestDecisionPolicy.input(0, 0.05);
+            input.ruleEngine.evidenceSource = 'classical-candidate-detector';
+            input.explanation.gradCamAndLesionEvidenceSpatiallyAgree = false;
+
+            result = grade.decisionPolicy(input, config);
+
+            testCase.verifyDecision(result, 'auto-clear');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'candidate-evidence-provisional'), 'advisory finding');
+            testCase.verifyEqual(TestDecisionPolicy.kindOf(result, ...
+                'explanation-spatially-inconsistent'), 'advisory finding');
+        end
     end
 
     methods (Static, Access = private)
+        function kind = kindOf(result, code)
+            %KINDOF The finding kind recorded for one reason code.
+            index = find(strcmp(result.reasonCodes, code), 1);
+            if isempty(index)
+                kind = sprintf('%s was not raised at all', code);
+                return;
+            end
+            kind = result.findingKinds{index};
+        end
+
         function input = input(level, probability)
             input = struct();
             input.quality = struct( ...

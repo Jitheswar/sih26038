@@ -3,6 +3,10 @@ function result = decisionPolicy(input, config)
 %   RESULT = grade.decisionPolicy(INPUT, CONFIG) returns exactly one of
 %   auto-clear, refer, or escalate.  Calibrated probability must be
 %   supplied explicitly; class softmax probabilities are never a fallback.
+%
+%   RESULT.reasonCodes lists every finding the policy raised, and
+%   RESULT.findingKinds names what each of them is, entry for entry.  The
+%   three kinds are the ones CONTEXT.md defines; see localKindNames below.
 
 rng(42, 'twister');
 if nargin < 2
@@ -12,15 +16,25 @@ end
 
 configuration = decisionConfiguration(config);
 normalized = normalizeDecisionInput(input);
+kindNames = localKindNames();
 
-% codes collects per-case safety exceptions, which force escalation.
-% disclosures collects build-level limitations, which are true of every
-% image and therefore cannot discriminate between cases.  Disclosures are
-% reported in reasonCodes and in the explanation exactly as before, but they
-% no longer force escalation unless decision_policy.escalateOnCapabilityGap
-% asks for the maximally conservative policy.
+% The three kinds are collected separately because they are three different
+% statements about the case, not one bucket of caveats.
+%
+%   codes         safety exceptions: per-case findings that force escalation.
+%   gaps          capability gaps: fields no detector in this build produces,
+%                 and therefore unknown on every image.  They discriminate
+%                 between no cases, so escalating on one escalates the whole
+%                 caseload; they are reported and do not force the decision.
+%   advisories    advisory findings: per-case and image-dependent like a
+%                 safety exception, reported, but not treated as
+%                 disqualifying.
+%
+% All three reach reasonCodes, in that order, exactly as before.  Only the
+% first is consulted when the decision is made.
 codes = {};
-disclosures = {};
+gaps = {};
+advisories = {};
 
 quality = normalized.quality;
 if isempty(quality.class)
@@ -70,7 +84,7 @@ end
 if rule.caseUnknownEvidence
     codes{end + 1} = 'required-evidence-unknown'; %#ok<AGROW>
 elseif rule.unknownEvidence
-    disclosures{end + 1} = 'evidence-capability-gap'; %#ok<AGROW>
+    gaps{end + 1} = 'evidence-capability-gap'; %#ok<AGROW>
 end
 if rule.unknownNeovascularisation
     if localIsCapabilityGap(rule, {'neovascularisation', ...
@@ -79,7 +93,7 @@ if rule.unknownNeovascularisation
         % neovascularisation masks, so this is unknown on every image.  The
         % committed mitigation is escalating every predicted Level 4, which
         % alwaysEscalateLevel4 does below, not escalating every case.
-        disclosures{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
+        gaps{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
     else
         codes{end + 1} = 'unknown-neovascularisation-status'; %#ok<AGROW>
     end
@@ -88,12 +102,12 @@ end
 agreementStatus = localAgreementStatus(normalized, configuration);
 agreementBasis = localAgreementBasis(normalized);
 % When the spatial check is advisory the state is still computed and still
-% reported; it simply does not force the decision.  Reporting it as a
-% disclosure rather than dropping it keeps §8.6's "flag in the report as
-% reduced explanation confidence" true of the output.
+% reported; it simply does not force the decision.  Reporting it as an
+% advisory finding rather than dropping it keeps §8.6's "flag in the report
+% as reduced explanation confidence" true of the output.
 if ~configuration.escalateOnExplanationDisagreement && ...
         localSpatiallyInconsistent(normalized)
-    disclosures{end + 1} = 'explanation-spatially-inconsistent'; %#ok<AGROW>
+    advisories{end + 1} = 'explanation-spatially-inconsistent'; %#ok<AGROW>
 end
 if strcmp(agreementStatus, 'spatially inconsistent')
     codes{end + 1} = 'explanation-disagreement'; %#ok<AGROW>
@@ -105,7 +119,7 @@ elseif strcmp(agreementStatus, 'insufficient evidence')
     codes{end + 1} = 'insufficient-explanation-evidence'; %#ok<AGROW>
 end
 if rule.candidateEvidence
-    disclosures{end + 1} = 'candidate-evidence-provisional'; %#ok<AGROW>
+    advisories{end + 1} = 'candidate-evidence-provisional'; %#ok<AGROW>
 end
 if cnn.predictedLevelKnown && cnn.predictedLevel == 4
     codes{end + 1} = 'cnn-level-4'; %#ok<AGROW>
@@ -119,8 +133,13 @@ if configuration.escalateOnCapabilityGap
     % evidence field lacks a detector.  This is what the pipeline did before
     % the distinction existed, kept reachable from configuration so the
     % ablation can measure both policies over one code path.
-    codes = [codes, disclosures];
-    disclosures = {};
+    %
+    % Capability gaps only.  Whether an advisory finding escalates is a
+    % different question with its own flag - the spatial check's is
+    % escalateOnExplanationDisagreement - and promoting advisories here
+    % would answer that question behind the other flag's back.
+    codes = [codes, gaps];
+    gaps = {};
 end
 mandatoryCodes = codes;
 if isempty(mandatoryCodes)
@@ -162,13 +181,32 @@ else
     decision = 'escalate';
 end
 
+% Everything collected in codes up to here either forced the escalation or
+% records why the positive path was not taken, so all of it is a per-case
+% safety exception.  Capability gaps promoted above are safety exceptions
+% too, by the configured choice to treat them that way.
+kinds = repmat({kindNames.safetyException}, 1, numel(codes));
+
 if isempty(mandatoryCodes) && strcmp(agreementStatus, 'concordant')
+    % Not a finding against the case but a finding about it: reported,
+    % image-dependent, and it does not force the decision.  That is what an
+    % advisory finding is, and it is the only kind it can honestly carry.
     codes = [{'concordant'}, codes];
+    kinds = [{kindNames.advisoryFinding}, kinds];
 end
 
-% Disclosures are reported alongside the per-case codes so nothing the old
-% policy surfaced is now hidden; they simply did not drive the decision.
-codes = [codes, disclosures];
+% The other two kinds are reported alongside the safety exceptions so
+% nothing the policy saw is hidden from the report; they simply did not
+% drive the decision.
+codes = [codes, gaps, advisories];
+kinds = [kinds, repmat({kindNames.capabilityGap}, 1, numel(gaps)), ...
+    repmat({kindNames.advisoryFinding}, 1, numel(advisories))];
+
+% findingKinds is only usable if it lines up entry for entry.
+if numel(kinds) ~= numel(codes)
+    error('grade:InvalidFindingKinds', ...
+        'Every reason code must carry exactly one finding kind.');
+end
 
 % The invariant is checked after all conditions so future edits cannot add
 % a fourth primary outcome accidentally.
@@ -224,6 +262,7 @@ result = struct();
 result.decision = decision;
 result.decisionReason = decisionReason;
 result.reasonCodes = codes;
+result.findingKinds = kinds;
 result.recommendedAction = recommendedAction;
 result.referralSlipRequired = referralSlipRequired;
 result.humanReviewRequired = humanReviewRequired;
@@ -237,6 +276,27 @@ result.evidenceQualityStatus = evidenceQualityStatus;
 result.candidateEvidenceStatus = candidateEvidenceStatus;
 result.candidateEvidenceWarning = rule.candidateWarning;
 result.explanation = explanation;
+end
+
+function names = localKindNames()
+%LOCALKINDNAMES The three kinds of finding, named as CONTEXT.md names them.
+%   safety exception   a finding about this case that forces escalation.
+%   advisory finding   a finding about this case that is reported and does
+%                      not force the decision.
+%   capability gap     a field no detector in this build produces, unknown
+%                      on every image, reported and never presented as a
+%                      per-case unknown.
+%
+%   The distinction is not cosmetic.  A capability gap discriminates between
+%   no cases, so a reader who cannot tell one from an advisory finding
+%   cannot tell "this image's attention was odd" from "this build has no
+%   neovascularisation detector".  §11.6 and the ablation configurations
+%   already say "advisory" for the demoted spatial state; this is the code
+%   using the same word.
+names = struct( ...
+    'safetyException', 'safety exception', ...
+    'advisoryFinding', 'advisory finding', ...
+    'capabilityGap', 'capability gap');
 end
 
 function answer = localSpatiallyInconsistent(normalized)
