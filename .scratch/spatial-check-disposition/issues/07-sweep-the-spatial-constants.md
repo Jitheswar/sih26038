@@ -40,3 +40,20 @@ That sharpens what the sweep is looking for. It is not "do these constants discr
 Note the baseline moves as coverage rises: A1 sends nobody home up to coverage 0.700, one patient at 0.738, and four at 1.000. So a recalibrated gate reaching coverage 0.70 must still send nobody home to remain admissible, while one reaching 0.74 is allowed a single miss.
 
 If no pair clears that bar, the finding is that the gate cannot be tuned into admissibility and A10 stands as shipped. That is a perfectly good answer and it should be reported as one rather than treated as a failed experiment.
+
+### Objective sharpened again, 2 September 2026
+
+The per-case records of issue 06 change what this sweep is allowed to optimise.
+
+The gate is now the only mechanism escalating `d1a24527a15d`, a proliferative patient the classifier calls Level 1 at 0.0593. Its spatial statistic is 0.0000, and the other three cases the classifier misses sit at 0.0000, 0.2044 and 0.3056.
+
+**Recalibrating to raise coverage moves the cut on exactly the statistic that separates those four from the rest, and the patient it would most easily lose is the proliferative one.** Raising `spatialAgreementFraction` above 0.3056 would keep all four; lowering the cut to buy coverage risks `5a2c27b95c7c` at 0.3056 first, then `caec68f11c86` at 0.2044.
+
+So the sweep is scored on a constraint before an objective:
+
+- **Constraint**: does this (cut, fraction) pair still escalate all four of the classifier's misses? A pair that does not is rejected regardless of what it does to coverage.
+- **Objective, subject to that**: coverage.
+
+Report the surface with the four patients marked on it, so the boundary where each is lost is visible rather than implied.
+
+The data for this already exists. `results/20260902_052342_ablation_A1_A5/per_case.csv` carries the spatial statistic per case per configuration, so the constraint can be evaluated offline for any pair without a further GPU pass. A fresh calibration-split pass is still wanted for selection discipline, but the validation-split surface can be drawn now.
