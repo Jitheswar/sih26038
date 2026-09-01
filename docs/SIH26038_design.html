@@ -1544,6 +1544,69 @@ AGREEMENT      Rule path and CNN agree
 <p><strong>The repair is visible on a single image.</strong> The screening-case test&apos;s explanation string now reads <code>CNN ICDR level: 0. ICDR rule level: 1. Agreement: concordant</code>. Under exact equality those two levels were a mismatch routed to a human; under the endpoint comparison they agree, because both place the patient below the referral boundary. That case is one of the 142 in the largest cell of the mismatch table above. <span class="tag v">Verified</span></p>
 </div>
 
+<h3>§11.6 measured results - 2 September 2026, the equal-coverage veto and A14</h3>
+
+<p>The A10-A13 table above compares configurations that decide different fractions of the caseload on raw miss counts. That comparison is unmatched, and correcting it changes which configurations are admissible and raises a question this section had not asked.</p>
+
+<div class="box warn">
+<h4>The comparison this section was making, and why it flatters the pipeline</h4>
+<p>A13 was rejected on 31 August for sending 4 referable patients home out of the 406 cases it decided, against the classifier's 4 out of all 550. Those denominators cover different case mixes. A deferral pipeline sheds exactly the low-confidence cases where a classifier's errors concentrate, so its count over a self-selected subset is not comparable to a classifier's count over everything, and the size of the discrepancy is unknown until it is measured.</p>
+<p style="margin-bottom:0"><code>eval/metrics/riskCoverage.m</code> already existed to prevent this. Its own documentation names the comparison: "§11.6 asks for exactly this comparison: A5 against A1 at equal coverage." <code>eval/ablationHarness.m</code> prints <em>Compare A5 with A1 at equal coverage</em> at the foot of every run. Neither the A1-A5 table nor the A10-A13 table did it. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The veto.</strong> <a href="../adr/0001-equal-coverage-safety-veto.md">ADR 0001</a> states the criterion: a configuration is inadmissible if it sends more referable patients home than the classifier alone does <em>at the same coverage</em>. The baseline is the classifier's own confidence ranking, using the definitions of <code>eval/fullMetricReport.m</code> unchanged. It counts false negatives only, because a patient referred unnecessarily is a different and recoverable event. It reads the point estimate, because the intervals on these counts overlap heavily. It is a veto and never a ranking. Computed by <code>eval/equalCoverageVeto.m</code>, which reconstructs the classifier baseline from per-case probabilities and refuses to run if that reconstruction disagrees with the harness's own A1 row on either the miss count or the routing.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Coverage</strong></td><td><strong>Sends home</strong></td><td><strong>Classifier at the same coverage</strong></td><td><strong>Admissible</strong></td></tr>
+<tr><td>A4 - CNN + quality gate + deferral</td><td>0.8382</td><td>4</td><td>1</td><td><strong>No</strong></td></tr>
+<tr><td>A5 - classical, shipped until 31 Aug</td><td>0.2745</td><td>1</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A9 - learned, hard exudates</td><td>0.0691</td><td>0</td><td>0</td><td>Yes</td></tr>
+<tr><td><strong>A10 - learned, endpoint levels, shipped</strong></td><td><strong>0.3273</strong></td><td><strong>0</strong></td><td><strong>0</strong></td><td><strong>Yes</strong></td></tr>
+<tr><td>A11 - learned, spatial advisory</td><td>0.2436</td><td>2</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A12 - learned, both repairs</td><td>0.6636</td><td>2</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A13 - classical, both repairs</td><td>0.7382</td><td>4</td><td>1</td><td><strong>No</strong></td></tr>
+</tbody>
+</table>
+
+<p>The reason is that the classifier's four misses all sit deep in its own low-confidence tail, at confidence ranks 400, 502, 512 and 542 of 550. Restricted to its most confident two thirds of cases it sends nobody home. The comparison that made A12 look safer than the classifier was measuring A12 against a baseline that included exactly the cases A12 declined to decide. The verdicts are independent of tie-breaking: at every truncation boundary a single case sits on the cut. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>A12 is inadmissible, and the §12 dependency dissolves</h4>
+<p><strong>A12 was recorded on 31 August as a recommendation awaiting the §12 clinician review</strong>, on the grounds that demoting the Grad-CAM spatial check from a gate to an advisory flag is a clinical judgement rather than only a technical one. Under the veto it does not reach that question: it sends two referable patients home where the classifier deciding the same number of cases sends none. The clinical judgement never has to be adjudicated, and <code>escalateOnExplanationDisagreement</code> stays <code>true</code> on the evidence rather than on the absence of a reviewer. A11 and A13 fall with it.</p>
+<p style="margin-bottom:0"><strong>A5, the configuration that shipped until 31 August, is also inadmissible.</strong> Its single miss at coverage 0.2745 is worse than the classifier alone deciding the same number of cases, which sends none home. A10 replaced it for reasons unrelated to this criterion and is the only non-trivial configuration in the study that passes. A1 and A2 pass vacuously: at full coverage the veto compares the classifier against itself. <span class="tag v">Verified</span></p>
+</div>
+
+<h4>A14 - deferring on the calibrated probability alone</h4>
+
+<p>Applying the veto raises the question §11.6 had not asked. If the classifier's misses concentrate in its own low-confidence tail, how much of the pipeline's safety is the pipeline, and how much is available from the calibrated probability by itself? <strong>A14</strong> answers it: rank cases by distance from the frozen threshold, hand the least confident to a human, and decide the rest by the threshold. No quality gate, no lesion evidence, no ICDR rule trace, no Grad-CAM, no agreement check.</p>
+
+<p>The cut is selected on the <strong>calibration</strong> split at a zero-miss budget and merely applied to validation, because the largest coverage at which a split happens to carry no misses is a property of that split, and choosing it on the split that then reports it is selection on the evaluation set. Measured by <code>eval/confidenceDeferral.m</code>, which refuses to run if both arguments name the same split. Calibration metrics: <code>results/20260902_013848_full_metrics_calibration</code>.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Coverage</strong></td><td><strong>Referable sent home</strong></td><td><strong>clear / refer / escalate</strong></td></tr>
+<tr><td>A10 - the pipeline that ships</td><td>0.3273</td><td>0</td><td>139 / 41 / 370</td></tr>
+<tr><td>A12 - the pipeline at its most permissive admissible-or-not</td><td>0.6636</td><td>2</td><td>244 / 121 / 185</td></tr>
+<tr><td><strong>A14 - calibrated probability alone</strong></td><td><strong>0.7527</strong></td><td><strong>1</strong></td><td><strong>219 / 195 / 136</strong></td></tr>
+</tbody>
+</table>
+
+<p>The cut selected on calibration was confidence &ge; 0.332877, covering 0.7671 of that split with nobody sent home. Transferred to validation it covers 0.7527 and sends one patient home, which is the honest cost of the transfer and is reported rather than tuned away. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>A14 covers more of the caseload than any pipeline configuration measured, and this is the finding to state plainly</h4>
+<p><strong>Deferring on the calibrated probability alone covers 75.3% of the caseload while sending one referable patient home. The pipeline that ships covers 32.7% and sends none.</strong> A14 also beats A12 and A13 on both axes at once. It is admissible under the veto, though vacuously: A14 <em>is</em> confidence-ranked truncation of the classifier, which is what ADR 0001 truncates to build its baseline, so it equals its own baseline at every coverage and the veto cannot discriminate on it. The comparison that means something is inverted - at equal misses, which configuration covers more - and on that comparison the pipeline loses.</p>
+<p><strong>The bound is structural, not a matter of tuning.</strong> A gate can only escalate more, never less, so the highest coverage the agreement check can reach with the learned channel is the no-gate case, A12 at 0.6636 with 2 sent home. No setting of the two spatial constants can lift the pipeline past A14 on this split. Recalibrating them is therefore an optimisation within the pipeline and not an answer to this table.</p>
+<p style="margin-bottom:0"><strong>What A14 is not.</strong> It is not a competing deliverable. R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those; A14 could not satisfy the problem statement if it covered everything. It is a <em>baseline that bounds what the deferral machinery adds on this split</em>, and the pipeline has to justify itself on the axes A14 cannot serve rather than on coverage at equal safety, where it currently loses. <span class="tag v">Verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>Two things this split cannot tell us, and one of them is the pipeline's whole claim</h4>
+<p><strong>The validation split contains no ungradable image.</strong> Its quality strata are 511 gradable and 39 borderline. The quality gate therefore never rejects a frame here, so A14's lack of one costs it nothing measurable, and R1.1's contribution to safety is not tested by this comparison in either direction. A14's advantage is to that extent an artefact of a split with no ungradable images in it.</p>
+<p style="margin-bottom:0"><strong>The pipeline's claim is about the failure mode this split cannot produce.</strong> §8.6 exists because a classifier that has learned a non-pathological image property produces a confident prediction and a plausible heatmap, and a confidently wrong prediction ranks <em>high</em> in A14's ordering and is auto-decided with nothing to catch it. That is precisely the case the under-detected check is built to catch and A14 structurally cannot. On in-domain APTOS validation the failure barely occurs, which is why A14 wins here. The claim predicts the ordering reverses under domain shift, and the sealed Messidor-2 set (§10.4) is the only external read available and therefore the experiment that decides it. <strong>That prediction is recorded here, before the unseal, so it cannot be fitted to the result afterwards.</strong> <span class="tag o">Open</span></p>
+</div>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">

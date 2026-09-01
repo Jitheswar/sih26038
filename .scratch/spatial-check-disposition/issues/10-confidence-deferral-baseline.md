@@ -1,6 +1,6 @@
 # Measure the confidence-ranked deferral baseline (A14)
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05
 
 ## Problem
@@ -44,3 +44,25 @@ Recording the finding with its answer is much stronger than having a judge find 
 - Risk-coverage curves for A14 and the shipped configuration reported together
 - §11.6 states the finding plainly, including that A14 dominates the pipeline on in-domain coverage at equal safety, and what the pipeline claims in exchange
 - The claim that the pipeline holds up better out of domain is written down as the prediction the sealed-set read will test, before that read happens
+
+## Resolution
+
+Measured with `eval/confidenceDeferral.m`. The cut was selected on the calibration split (n=365) at a zero-miss budget, giving confidence >= 0.332877 and covering 0.7671 of that split with nobody sent home, then applied unchanged to validation.
+
+| Cfg | Coverage | Referable sent home | clear / refer / escalate |
+| --- | --- | --- | --- |
+| A10 - the pipeline that ships | 0.3273 | 0 | 139 / 41 / 370 |
+| A12 - the pipeline at its most permissive | 0.6636 | 2 | 244 / 121 / 185 |
+| **A14 - calibrated probability alone** | **0.7527** | **1** | **219 / 195 / 136** |
+
+A14 covers more of the caseload than any pipeline configuration measured, and beats A12 and A13 on both axes at once.
+
+The veto is vacuous for A14 by construction, which the ticket did not anticipate: A14 is confidence-ranked truncation of the classifier, and that is exactly what ADR 0001 truncates to build its baseline, so A14 equals its own baseline at every coverage. It can be neither admitted nor rejected on that criterion. The comparison that means something is inverted, coverage at equal misses, and on that the pipeline loses.
+
+The bound is structural rather than a matter of tuning. A gate can only escalate more, never less, so the most permissive the agreement check can be is the no-gate case, A12 at 0.6636 with two sent home. No setting of the two spatial constants lifts the pipeline past A14 on this split, which is why ADR 0002 records the D2 sweep as an optimisation within the pipeline rather than an answer to §11.6.
+
+Two limits of the split are recorded with the result. It contains no ungradable image (511 gradable, 39 borderline), so the quality gate never rejects a frame and A14's lack of one costs it nothing measurable here. And the failure §8.6 exists to catch, a confident prediction keyed on a non-pathological image property, ranks high in A14's ordering and is auto-decided with nothing to stop it; that failure barely occurs in domain, which is why A14 wins here.
+
+The prediction that the ordering reverses under domain shift is written into §11.6 before the sealed Messidor-2 set is opened, so it cannot be fitted to the result afterwards.
+
+Written up in §11.6, the README status section, and ADR 0002.

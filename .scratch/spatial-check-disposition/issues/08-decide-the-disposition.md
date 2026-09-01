@@ -1,6 +1,6 @@
 # Decide the spatial check's disposition and record it
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 06, 07
 
 ## Problem
@@ -30,3 +30,19 @@ Whatever is decided, record the §12 reader study as descoped rather than pendin
 - `config/default.json` matches the decision
 - §11.6, the README status section and `CONTEXT.md` updated
 - Full test suite green
+
+## Resolution
+
+Recorded as `docs/adr/0002-keep-the-grad-cam-spatial-gate.md`.
+
+D1 (demote to advisory) is rejected on evidence: A11 and A12 are both inadmissible under the ADR 0001 veto, so decision rule 1 of this ticket applies and no further argument is needed. The clinical judgement the decision was parked on never has to be adjudicated, and `escalateOnExplanationDisagreement` stays `true` because the measurement says so rather than because no reviewer was available.
+
+D5 (constants into configuration) shipped in 0cfaef9, independently of the disposition, as the §13.3 defect repair it always was.
+
+D4 stands. D2 remains open as an optimisation within the pipeline, and its value is now bounded: no setting of the two constants lifts the pipeline past A14 on this split, because a gate can only escalate more. D3 is descoped.
+
+The §12 reader study is recorded as descoped rather than pending, per this ticket's note.
+
+`config/default.json` is unchanged in behaviour and gains the two spatial constants at their historical values. The suite is green at 299 passed.
+
+Not settled by this ADR, and said so in it: whether the gate catches anything the mandatory under-detected check does not. The veto establishes that removing it costs two patients and buys coverage the project cannot bank, which is enough to keep it and not enough to justify it. Issue 04, identifying the patients each configuration sends home, is the evidence that would settle it.

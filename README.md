@@ -116,6 +116,48 @@ Its second repair demotes the Grad-CAM spatial check from a gate to an advisory 
 
 The operating point frozen on 23 August is untouched: the threshold of 0.40, the temperature and the checkpoint are unchanged, and no metric behind them was re-selected.
 
+Configurations are now compared against the classifier at equal coverage, and that changes which of them are admissible.
+
+The A10-A13 table above compares configurations that decide different fractions of the caseload on raw miss counts.
+A deferral pipeline sheds exactly the low-confidence cases where a classifier's errors concentrate, so its count over a self-selected subset is not comparable to the classifier's count over everything.
+`docs/adr/0001-equal-coverage-safety-veto.md` states the criterion: a configuration is inadmissible if it sends more referable patients home than the classifier alone does at the same coverage.
+It counts false negatives only, reads the point estimate because these intervals overlap heavily, and is a veto rather than a ranking.
+
+| Cfg | Coverage | Sends home | Classifier at same coverage | Admissible |
+| --- | --- | --- | --- | --- |
+| A5 - classical, shipped until 31 Aug | 0.2745 | 1 | 0 | No |
+| **A10 - learned, endpoint levels, shipped** | **0.3273** | **0** | **0** | **Yes** |
+| A11 - learned, spatial advisory | 0.2436 | 2 | 0 | No |
+| A12 - learned, both repairs | 0.6636 | 2 | 0 | No |
+| A13 - classical, both repairs | 0.7382 | 4 | 1 | No |
+
+The classifier's four misses all sit deep in its own low-confidence tail, at confidence ranks 400, 502, 512 and 542 of 550, so restricted to its most confident two thirds of cases it sends nobody home.
+The comparison that made A12 look safer than the classifier was measuring it against a baseline that included exactly the cases A12 declined to decide.
+
+A12 is therefore inadmissible and the clinical judgement it was parked on never has to be adjudicated.
+`escalateOnExplanationDisagreement` stays `true` on the evidence rather than on the absence of a reviewer, and the §12 reader study is recorded as descoped rather than pending.
+See `docs/adr/0002-keep-the-grad-cam-spatial-gate.md`.
+A5, which shipped until 31 August, is also inadmissible; A10 is the only non-trivial configuration in the study that passes.
+
+Deferring on the calibrated probability alone beats the pipeline on this split, and that is stated here rather than left for a judge to find.
+
+Configuration A14 ranks cases by distance from the frozen threshold and hands the least confident to a human, with no quality gate, no lesion evidence, no ICDR rule trace, no Grad-CAM and no agreement check.
+Its cut is selected on the calibration split at a zero-miss budget and applied to validation, never selected on the split that reports it.
+
+| Cfg | Coverage | Referable sent home |
+| --- | --- | --- |
+| A10 - the pipeline that ships | 0.3273 | 0 |
+| **A14 - calibrated probability alone** | **0.7527** | **1** |
+
+The bound is structural rather than a matter of tuning: a gate can only escalate more, so the most permissive the agreement check can be is the no-gate case, A12 at 0.6636 with two sent home, and no setting of the spatial constants lifts the pipeline past A14 on this split.
+
+A14 is not a competing deliverable.
+R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those.
+It is a baseline that bounds what the deferral machinery adds here, and the pipeline has to justify itself on the axes A14 cannot serve.
+Two limits of this split matter for reading it: it contains no ungradable image, so the quality gate never fires and A14's lack of one costs it nothing measurable; and the failure §8.6 exists to catch, a confident prediction keyed on a non-pathological image property, ranks high in A14's ordering and is auto-decided with nothing to stop it.
+That failure barely occurs in domain, which is why A14 wins here.
+The claim that the ordering reverses under domain shift is recorded before the sealed Messidor-2 set is opened, so it cannot be fitted to the result afterwards.
+
 Vessel segmentation (§6.3, R2.2) is trained.
 A patch-based U-Net on the CLAHE-equalised green channel, trained on DRIVE at 128x128 crops, selected on validation AUC at epoch 8 of 16 before early stopping.
 
@@ -280,7 +322,8 @@ Image Processing, Computer Vision, Deep Learning, Medical Imaging, Statistics an
 - **Vessel metrics are scored inside the field-of-view mask only.** A DRIVE frame is 31 per cent black corner outside the camera aperture and every one of those pixels is a true negative, so whole-frame scoring hands the result a third of a frame of free specificity.
 - **Bare accuracy is never reported.** Sensitivity and specificity are reported at the frozen operating point with 95% Wilson intervals and stated n; softmax output is not confidence, so temperature-scaled probabilities are reported with ECE and a reliability diagram.
 
-Full detail and rationale for every rule above is in `docs/SIH26038_design.html`; `AGENTS.md` has the equivalent guidance for agents working in this repository.
+Full detail and rationale for every rule above is in `docs/SIH26038_design.html`.
+`CONTEXT.md` is the glossary, `docs/adr/` holds the decisions that were hard to reverse, and `CLAUDE.md` points agents at both.
 
 ## License
 
