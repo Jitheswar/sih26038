@@ -151,12 +151,32 @@ Its cut is selected on the calibration split at a zero-miss budget and applied t
 
 The bound is structural rather than a matter of tuning: a gate can only escalate more, so the most permissive the agreement check can be is the no-gate case, A12 at 0.6636 with two sent home, and no setting of the spatial constants lifts the pipeline past A14 on this split.
 
-A14 is not a competing deliverable.
-R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those.
-It is a baseline that bounds what the deferral machinery adds here, and the pipeline has to justify itself on the axes A14 cannot serve.
-Two limits of this split matter for reading it: it contains no ungradable image, so the quality gate never fires and A14's lack of one costs it nothing measurable; and the failure §8.6 exists to catch, a confident prediction keyed on a non-pathological image property, ranks high in A14's ordering and is auto-decided with nothing to stop it.
-That failure barely occurs in domain, which is why A14 wins here.
-The claim that the ordering reverses under domain shift is recorded before the sealed Messidor-2 set is opened, so it cannot be fitted to the result afterwards.
+That reading was corrected the same day, and the correction goes against it.
+
+Per-case records now name the patients each configuration sends home (`results/20260902_052342_ablation_A1_A5/per_case.csv`, 3,300 rows, every configuration reproducing its 30 August numbers exactly).
+The classifier's four misses are three graded 2 and one graded **4, proliferative**.
+
+That patient, `d1a24527a15d`, is called Level 1 by the classifier at a calibrated referable probability of 0.0593: confident, and badly wrong.
+The rule engine also reads Level 1, so the channels agree and the agreement status is concordant.
+The under-detected check does not fire, because it runs on a referable prediction and this prediction is Level 1.
+`alwaysEscalateLevel4` does not fire, because it reads the predicted level and not the reference grade.
+**The Grad-CAM spatial gate is the only mechanism that escalates this patient**, and it fires at full strength: zero of the candidates reach the attention cut.
+
+Demote the gate and the patient goes home. A11, A12 and A13 all auto-clear the case as concordant.
+So does A14, whose confidence of `|0.0593 - 0.40| = 0.3407` sits above its calibration-selected cut of 0.332877.
+**A14's single miss is the proliferative patient**, so its coverage advantage is bought with the worst case in the split.
+
+Across the 548 A10 rows carrying a spatial statistic, the gate fires on 57.1% of cases the classifier gets right, 55.6% of those it over-refers, and 100% of the four it sends home, whose median statistic is 0.0200 against 0.2128.
+Four of four at a 57.1% base rate would happen by chance with probability 0.106, so this is a direction and not a demonstration.
+What it does settle is narrower and enough for the disposition: on this split, removing the gate sends a proliferative patient home and nothing else in the pipeline catches it.
+
+The cost is stated plainly rather than argued away: the gate escalates 314 of 550 cases to catch four.
+§9.5 prices that at 591.82 grader-hours a year against 214.65 at the scenario deferral rate.
+
+The earlier claim that this failure "barely occurs in domain" was wrong, and the prediction built on it - that the ordering only reverses under domain shift - is withdrawn.
+It reverses in domain, on this split.
+A14 remains not a competing deliverable: R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those.
+One limit of the split still stands: it contains no ungradable image, so the quality gate never fires and A14's lack of one costs it nothing measurable here.
 
 Vessel segmentation (§6.3, R2.2) is trained.
 A patch-based U-Net on the CLAHE-equalised green channel, trained on DRIVE at 128x128 crops, selected on validation AUC at epoch 8 of 16 before early stopping.

@@ -1607,6 +1607,56 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0"><strong>The pipeline's claim is about the failure mode this split cannot produce.</strong> §8.6 exists because a classifier that has learned a non-pathological image property produces a confident prediction and a plausible heatmap, and a confidently wrong prediction ranks <em>high</em> in A14's ordering and is auto-decided with nothing to catch it. That is precisely the case the under-detected check is built to catch and A14 structurally cannot. On in-domain APTOS validation the failure barely occurs, which is why A14 wins here. The claim predicts the ordering reverses under domain shift, and the sealed Messidor-2 set (§10.4) is the only external read available and therefore the experiment that decides it. <strong>That prediction is recorded here, before the unseal, so it cannot be fitted to the result afterwards.</strong> <span class="tag o">Open</span></p>
 </div>
 
+<h3>§11.6 correction - 2 September 2026, what the spatial gate actually catches</h3>
+
+<div class="box warn">
+<h4>The entry above is corrected here, and the correction goes against it</h4>
+<p>The A14 entry concluded that deferring on the calibrated probability alone dominates the pipeline on this split, and explained the pipeline's loss by saying the failure §8.6 exists to catch "barely occurs in domain". <strong>Per-case records now show that it does occur in domain, that it occurs on the most severe grade in the split, and that the Grad-CAM spatial gate is the only mechanism that catches it.</strong> The reasoning above stands as written and its conclusion does not.</p>
+<p style="margin-bottom:0">Produced by <code>eval/ablationHarness.m</code> writing <code>per_case.csv</code>: <code>results/20260902_052342_ablation_A1_A5</code>, 3,300 rows over six configurations. Every configuration reproduces its 30 August coverage and miss count exactly, so this is the same measurement with the patients named rather than a new one. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The classifier sends four referable patients home, and they are now identifiable.</strong></p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Image</strong></td><td><strong>Reference grade</strong></td><td><strong>Calibrated P(referable)</strong></td><td><strong>CNN level</strong></td><td><strong>Spatial statistic</strong></td></tr>
+<tr><td><code>d1a24527a15d</code></td><td><strong>4 - proliferative</strong></td><td><strong>0.0593</strong></td><td>1</td><td><strong>0.0000</strong></td></tr>
+<tr><td><code>caec68f11c86</code></td><td>2</td><td>0.1988</td><td>0</td><td>0.2044</td></tr>
+<tr><td><code>3f47f83217b5</code></td><td>2</td><td>0.2383</td><td>1</td><td>0.0000</td></tr>
+<tr><td><code>5a2c27b95c7c</code></td><td>2</td><td>0.3526</td><td>1</td><td>0.3056</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>A11, A12, A13 and A14 all send a proliferative patient home; A10 does not, and only the gate stops it</h4>
+<p><code>d1a24527a15d</code> is graded 4, the most severe point on the ICDR scale. The classifier calls it Level 1 at a calibrated referable probability of <strong>0.0593</strong>: not an uncertain case it declines to commit on, but a confident and badly wrong one. The rule engine also reads Level 1, so the two channels agree, and the agreement status is <em>concordant</em>. Every check that compares the channels to one another passes it.</p>
+<p><strong>In A10 its four reason codes are <code>explanation-disagreement</code>, two capability gaps and one advisory finding.</strong> Only the first forces escalation. The under-detected check does not fire, because that check runs on a referable prediction and this prediction is Level 1. <code>alwaysEscalateLevel4</code> does not fire, because that reads the predicted level, not the reference grade. The spatial gate is the sole mechanism standing between this patient and an automated all-clear, and it fires at the maximum strength of its signal: <strong>zero</strong> of the candidates reach the attention cut.</p>
+<p style="margin-bottom:0">Demote the gate and the patient goes home. A11, A12 and A13 all auto-clear this case as <em>concordant</em>. <strong>So does A14</strong>: its confidence, <code>|0.0593 - 0.40| = 0.3407</code>, sits above the cut of 0.332877 selected on calibration, so A14 retains the case and clears it. A14's single miss is this patient. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The gate fires on every case the classifier gets wrong, and their statistics are an order of magnitude lower.</strong> Over the 548 A10 rows carrying a spatial statistic:</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Case group</strong></td><td><strong>n</strong></td><td><strong>Median spatial statistic</strong></td><td><strong>Gate fires</strong></td></tr>
+<tr><td>Classifier correct on the endpoint</td><td>517</td><td>0.2128</td><td>57.1%</td></tr>
+<tr><td>Classifier over-refers</td><td>27</td><td>0.2308</td><td>55.6%</td></tr>
+<tr><td><strong>Classifier sends a referable patient home</strong></td><td><strong>4</strong></td><td><strong>0.0200</strong></td><td><strong>100%</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Two signals agree, on four cases, and four cases is what this is worth</h4>
+<p>The gate fires on all four of the classifier's misses against a base rate of 57.1%, which would happen by chance with probability 0.571<sup>4</sup> = <strong>0.106</strong>. That is suggestive and it is not significant. Their median statistic, 0.0200 against 0.2128, is a second signal pointing the same way, and it is not independent enough of the first to multiply through. <strong>On n = 4 the honest claim is a direction, not a demonstration</strong>, and the §12 reader study or the sealed set are what would settle it.</p>
+<p style="margin-bottom:0">What the numbers do settle is narrower and still decisive for the disposition: on this split, removing the gate sends a proliferative patient home, and no other mechanism in the pipeline catches that case. That is enough to keep the gate without needing the discrimination claim to hold. <span class="tag p">Partly verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>What this costs, stated plainly</h4>
+<p>The gate escalates 314 of 550 cases, 57.1% of the caseload, and the four it needed to catch are four. A reader who wants the trade in one sentence: <strong>the pipeline hands 57% of its patients to a human in order to catch four the classifier would have sent home, one of them proliferative.</strong> Whether that is a good exchange is a service-capacity question, and §9.5 now prices it: at the shipped deferral rate the district needs 591.82 grader-hours a year against 214.65 at the scenario rate.</p>
+<p style="margin-bottom:0">This also revises what §8.3 implies about the gate. §8.3 is right that a 14x14 map cannot localise a microaneurysm, and the earlier reading took that to mean a test built on it asks for precision the channel does not have. The measurement says the coarse signal is nonetheless lowest exactly where the classifier is wrong. A channel too coarse to say <em>where</em> a lesion is can still say that attention and evidence are not in the same place at all, and that is what this gate reads. <span class="tag v">Verified</span></p>
+</div>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">
