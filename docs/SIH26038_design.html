@@ -155,6 +155,7 @@ hr{border:none; border-top:.5px solid var(--rule); margin:5mm 0}
 <tr><td>Fix, 24 Aug 2026, §11.6 harness drift</td><td><strong>The ablation harness held its own copy of the evidence construction and would have kept measuring the old pipeline.</strong> <code>eval/ablationHarness.m</code> duplicated <code>localICDREvidence</code> and <code>localEvidenceSupportsCNN</code> from <code>app.runScreeningCase</code>, with a comment that <code>TestAblationHarness</code> fails if they stop matching. Fixing the deployed path alone would have left the harness measuring a system that no longer existed. Both callers now delegate to <code>grade.icdrEvidenceFromDetection</code> and <code>grade.evidenceSupportsCNN</code>, so the schema cannot drift. Two copies of an evidence schema is precisely how an evaluation path diverges from the deployed one while still passing its own tests. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, §8.6 evidence support check</td><td><strong>A Level 1 prediction was treated as contradicted by its own defining finding.</strong> <code>localEvidenceSupportsCNN</code> required <code>candidateCount == 0</code> for any non-referable prediction. ICDR Level 1 is defined as microaneurysms only, so a Level 1 image is supposed to carry candidates, and counting them as evidence against a Level 1 call inverts the scale. The check now asks whether the rule engine also reads the evidence as non-referable. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, demo entry point</td><td><strong>The integrated demo ran a pre-freeze model.</strong> <code>eval/appSmoke.m</code> hardcoded <code>results/20260822_030539/best_model.mat</code> and <code>results/20260822_091625/temperature_fit.mat</code>, both of which predate the operating point frozen on 23 August, so the demo graded with one model while every published figure came from another. It now reads <code>operating_point.model</code> and <code>operating_point.calibration</code> from <code>config/default.json</code>. Separately, the <code>localDecisionConfig</code> fallback in <code>app.runScreeningCase</code> still carried the pre-freeze <code>autoClearThreshold</code> 0.20 and now carries 0.40. <span class="tag v">Verified</span></td></tr>
+<tr><td>Added, 1 Sep 2026, §9.5 results / Correction, §17.8</td><td><strong>E1 to E6 are run and §9.5 carries measured numbers.</strong> All six come from one seeded invocation of <code>simulink/sweep_experiments.m</code> and reproduce the 23 August run of the same model to eight significant figures. Two entries in §9.5's plan do not survive contact with the measurement and are recorded as such rather than quietly reported: E2 sweeps sensitivity with specificity held fixed, so it prices extra true positives and not the extra false positives §9.5 describes, and the headline Pareto curve is therefore not yet the curve §9.5 specifies; E5 shows the quality gate lowering grader load rather than raising it, because an image that exhausts its recaptures is routed to human review while the model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality. <strong>E3 now sweeps the measured deferral rate as well as the scenario grid</strong>, read from <code>measuredDeferralRate</code> in the district configuration, because the grid stopped at 0.30 while the shipped pipeline defers at 0.6727 and every §9.5 figure would otherwise have described a system nobody runs. <strong>§17.8 named the quality rejection rate and the grader service time as measured from our own pipeline. Both are placeholders</strong> and always were: the 21% is the §5.1 field result from a deployed system elsewhere, and the 30 seconds is the R4.5 target awaiting the §12 reader study. That paragraph is corrected and now partitions every district parameter into measured, placeholder, and scenario. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, test suite</td><td><strong>A test asserted the defect.</strong> <code>TestRunScreeningCase.completedCaseHasEveryChannel</code> pinned <code>decision == 'escalate'</code> on an ordinary gradable image, so a pipeline that escalated all 550 validation cases kept a green suite. It now asserts that a capability gap does not by itself route a case to a human, that the gap is still disclosed in the explanation and the warnings, and that the reachable rule level is capped. Eleven further tests were added across <code>TestICDRule</code> and <code>TestDecisionPolicy</code> covering the partition, the reachable-level cap, the disclosure path, the case-level unknown that must still escalate, and <code>escalateOnCapabilityGap</code> restoring the conservative policy. <span class="tag v">Verified</span></td></tr>
 </tbody>
 </table>
@@ -1036,6 +1037,123 @@ AGREEMENT      Rule path and CNN agree
 
 <p><strong>Headline deliverable from this component:</strong> a Pareto curve of screening sensitivity against annual grader-hours, with the PS's &gt;90% sensitivity target marked on it, and a stated minimum viable grader count for a district of 100,000 screenings per year. That is a genuine operations-research result derived from your own measured model parameters, and no other team will have one.</p>
 
+<h3>§9.5 measured results - 1 September 2026, E1 to E6</h3>
+
+<p>All six experiments come from one invocation of <code>simulink/sweep_experiments.m</code> against the committed <code>simulink/district_config.json</code> at seed 42, running the SimEvents model in <code>simulink/district_model.slx</code>. Results directories are named below, each holding the sweep CSV, the plots, and the exact configuration the run used. E1 to E6 reproduce the 23 August run of the same model to eight significant figures, which is the check that nothing the model reads has drifted since the operating point was frozen.</p>
+
+<div class="box warn">
+<h4>How every annualised figure below was scaled</h4>
+<p>Each sweep point simulates a <strong>14-day window held at the full annual arrival rate</strong> of 100,000 / (365 &times; 86,400) = 3.1710&times;10<sup>-3</sup> patients per second. The window is shortened by overriding the simulation duration only; the rate is passed explicitly rather than derived from the short window, so arrivals, service times and routing are unaffected by the window length and the sample is of steady-state queueing behaviour, not of a scaled-down district.</p>
+<p style="margin-bottom:0"><strong>Every annual figure on this page is that 14-day measurement multiplied by 365/14 = 26.07. It is an extrapolation from a steady-state window, not a simulated year.</strong> The window length is itself an assumption traded against wall-clock cost, and a longer window would narrow sampling noise at proportionally higher run cost. Every number here is conditional on the configured parameters, several of which are still placeholders rather than measurements: see <code>docs/simulation_assumptions.md</code> and §17.8.</p>
+</div>
+
+<p><strong>E1 - minimum grader count at a fixed annual volume.</strong> Sweeps 1 to 12 graders, stopping at the first count that issues 95% of reports inside the 24-hour turnaround target. Results: <code>results/20260901_224717_814_E1_minimum_grader_count</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Annual volume</strong></td><td><strong>Minimum graders</strong></td><td><strong>Reports inside the 24 h target</strong></td><td><strong>Grader utilisation</strong></td></tr>
+<tr><td>50,000</td><td>1</td><td>100%</td><td>&mdash;</td></tr>
+<tr><td><strong>100,000</strong></td><td><strong>1</strong></td><td><strong>100%</strong></td><td><strong>0.0245</strong></td></tr>
+<tr><td>150,000</td><td>1</td><td>100%</td><td>&mdash;</td></tr>
+<tr><td colspan="4">14-day window at 100,000/year: 3,835 patients generated, 2,822 auto-cleared, 583 referred, 430 escalated, 1,013 reaching a human. Grader work 8.233 hours over the window, mean turnaround 1.094 h, p95 6.067 h. <span class="tag v">Verified</span></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The headline answer is one grader, and the headcount is the wrong number to quote</h4>
+<p><strong>One grader clears every report inside the target at 100,000 screenings a year, at 2.45% utilisation, and the same holds at 50,000 and at 150,000.</strong> The sweep cannot find a binding constraint because at the configured service time there is not one: 1,013 human reads over 14 days at 30 seconds each is 8.2 hours of work, and no queue forms behind it.</p>
+<p>Two configured values produce that, and neither is measured. <code>graderServiceTimeSeconds</code> is a <strong>30-second placeholder</strong> standing in for the R4.5 target until the §12 reader study reports an actual service-time distribution, and the SimEvents Resource Pool is continuously available, with no shifts, leave, or working hours. A grader who takes five minutes a case rather than thirty seconds does ten times the work per read, and one who works an eight-hour day rather than round the clock has a third of the window to do it in. Those two together multiply the 2.45% utilisation by thirty, to roughly 74%, and at that point E1 has something to find. <strong>Until the reader study lands, "one grader is enough" is a statement about the placeholder, not about a district.</strong></p>
+<p style="margin-bottom:0">The figure that survives those two assumptions is the workload rather than the headcount: <strong>214.65 grader-hours per year</strong> at 100,000 screenings, extrapolated from the 14-day window as described above. That number scales with the service time linearly and is the one to quote, alongside the service time it assumes.</p>
+</div>
+
+<p><strong>E2 - AI operating point against grader workload.</strong> Sweeps model sensitivity at a deliberately generous 12 graders, so the review queue is not the bottleneck and grader-hours track referral volume rather than queueing. Results: <code>results/20260901_224917_012_E2_sensitivity_versus_workload</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Model sensitivity</strong></td><td>0.80</td><td>0.85</td><td><strong>0.90</strong></td><td>0.93</td><td><strong>0.95</strong></td><td>0.97</td></tr>
+<tr><td><strong>Annual grader-hours (extrapolated)</strong></td><td>203.14</td><td>206.83</td><td><strong>209.44</strong></td><td>211.18</td><td><strong>213.57</strong></td><td>215.09</td></tr>
+<tr><td>Referrals in the 14-day window</td><td>528</td><td>545</td><td>558</td><td>566</td><td>578</td><td>585</td></tr>
+<tr><td>False-positive share of workload</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td></tr>
+</tbody>
+</table>
+<p>Escalations are constant at 430 across all six points, as they must be: the deferral rate is not what this sweep moves. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>The move the PS cares about costs about four grader-hours a year, and this sweep measures only half of it</h4>
+<p><strong>Raising sensitivity from 0.90 to 0.95 - the move §9.5 names - costs 4.13 grader-hours per year, under 2%.</strong> Across the whole swept range, 0.80 to 0.97, the cost is 11.95 grader-hours per year, 5.9%. On these parameters the sensitivity margin a screening tool wants is close to free in capacity terms, which is the right direction for §3's asymmetry between a missed referable patient and a wasted appointment.</p>
+<p><strong>The number is small partly because the sweep is not yet the one §9.5 specifies.</strong> It overrides <code>ModelSensitivity</code> alone and leaves <code>ModelSpecificity</code> at the frozen 0.9167, so every extra referral it produces is a true positive and the false-positive share of the workload is invariant at 0.07497 by construction - the same figure in all six rows above. §9.5 describes sensitivity as bought with false positives, and that is a movement along the classifier's ROC curve, which this sweep does not make. What E2 currently establishes is the grader cost of catching more true positives; the cost of the false positives that a real threshold change would also buy is not in these numbers.</p>
+<p style="margin-bottom:0"><strong>The headline Pareto curve of §9.5 is therefore not yet the curve §9.5 asks for.</strong> Making it so requires pairing each sensitivity with the specificity the calibrated model actually reaches there, which is available - <code>results/20260824_035401_full_metrics_validation</code> records the full ROC, 551 points, AUC 0.9847 - and requires the district configuration to name which ROC it walks and on which split. That is an open item, recorded here rather than papered over, and until it is closed the E2 figures must be quoted as the true-positive half of the trade-off rather than as the trade-off.</p>
+</div>
+
+<p><strong>E3 - deferral threshold against human capacity.</strong> Sweeps the deferral rate at 12 graders. The scenario grid runs to 0.30; the rate the shipped pipeline actually measures is appended as its own point, read from <code>measuredDeferralRate</code> in the configuration so it follows the pipeline instead of going stale behind it. Results: <code>results/20260901_225104_283_E3_deferral_threshold</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Deferral rate</strong></td><td><strong>Annual grader-hours</strong></td><td><strong>Auto-cleared share</strong></td><td><strong>Cases reaching a human (14 d)</strong></td><td><strong>Of which deferral-driven</strong></td></tr>
+<tr><td>0.02</td><td>160.12</td><td>80.3%</td><td>755</td><td>84</td></tr>
+<tr><td>0.05</td><td>180.33</td><td>77.8%</td><td>850</td><td>198</td></tr>
+<tr><td>0.10 <span class="small">configured scenario value</span></td><td>214.65</td><td>73.6%</td><td>1,013</td><td>389</td></tr>
+<tr><td>0.15</td><td>249.42</td><td>69.3%</td><td>1,177</td><td>587</td></tr>
+<tr><td>0.20</td><td>284.83</td><td>65.0%</td><td>1,343</td><td>784</td></tr>
+<tr><td>0.30</td><td>352.83</td><td>56.7%</td><td>1,662</td><td>1,178</td></tr>
+<tr><td><strong>0.6727</strong> <span class="small">measured, the pipeline that ships</span></td><td><strong>591.82</strong></td><td><strong>27.4%</strong></td><td><strong>2,784</strong></td><td><strong>2,543</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>What the safety mechanism costs, and the word "coverage" meaning two different things</h4>
+<p><strong>The escalation path is close to linear in grader-hours.</strong> Over the scenario grid, each additional point of deferral rate costs about 6.9 grader-hours a year; the auto-cleared share falls from 80.3% at a 0.02 deferral rate to 56.7% at 0.30. §8.6's safety mechanism therefore has a price that can be stated in specialist time rather than argued about qualitatively, which is what E3 exists to produce.</p>
+<p><strong>The rate the pipeline actually defers at costs 591.82 grader-hours a year, 2.76 times the 214.65 the configured scenario value implies.</strong> The configured <code>deferralRate</code> of 0.10 is a scenario value describing a decision policy that can act autonomously, and no measured configuration reaches it: the shipped pipeline, §11.6 configuration A10, escalates 370 of 550 validation cases, a deferral rate of <strong>0.6727</strong>. That point is now swept in its own right, read from <code>measuredDeferralRate</code> in the district configuration so it follows the pipeline rather than going stale behind it. Its non-deferred fraction, 1,051 auto-cleared plus 200 referred out of 3,835, is 32.6% against A10's measured coverage of 0.3273, which is the check that the capacity model routes the caseload the way the pipeline it represents decides it. Every figure quoted at 0.10 describes a hypothetical improved system and must be labelled that way; the figure that describes what we ship today is 591.82 grader-hours a year. <span class="tag v">Verified</span></p>
+<p style="margin-bottom:0"><strong>Do not read E3's auto-cleared share as the coverage of §11.6.</strong> CONTEXT.md defines coverage as auto-clear plus refer, the fraction the pipeline decides without a human. In this capacity model a referred patient still consumes a grader read - refer and escalate both enter the upload queue and then the grader queue - so the column above counts auto-clears only. The two numbers answer different questions and are not comparable; at the same deferral rate the §11.6 coverage is the larger of the two.</p>
+</div>
+
+<p><strong>E4 - bandwidth and connectivity duty cycle.</strong> Three bandwidths crossed with two connectivity availabilities, at the configured 8 MB per case. Results: <code>results/20260901_225225_193_E4_bandwidth</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Connectivity</strong></td><td><strong>1 Mbps</strong></td><td><strong>5 Mbps</strong></td><td><strong>20 Mbps</strong></td><td><strong>Peak upload queue</strong></td></tr>
+<tr><td>0.3 availability - mean turnaround</td><td>6.295 h</td><td>6.102 h</td><td>6.100 h</td><td>65</td></tr>
+<tr><td>0.9 availability - mean turnaround</td><td>0.1587 h</td><td>0.1420 h</td><td>0.1394 h</td><td>9</td></tr>
+<tr><td>0.3 availability - p95 turnaround</td><td>15.80 h</td><td>15.73 h</td><td>15.72 h</td><td>&mdash;</td></tr>
+<tr><td>0.9 availability - p95 turnaround</td><td>1.093 h</td><td>1.068 h</td><td>1.065 h</td><td>&mdash;</td></tr>
+</tbody>
+</table>
+<p>All six points issue 100% of reports inside the 24-hour target. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>Connectivity is the constraint and bandwidth is not, by two orders of magnitude</h4>
+<p><strong>A twentyfold increase in bandwidth buys 3.1% of mean turnaround at 0.3 availability and 12.2% at 0.9. Raising availability from 0.3 to 0.9 at fixed bandwidth cuts it by 97.5% at 1 Mbps and 97.7% at 20 Mbps.</strong> The arithmetic behind that is not subtle: at 8 MB a case, the transfer itself takes 64 seconds at 1 Mbps and 3.2 seconds at 20 Mbps, while a district on a 30% duty cycle waits hours for the next window. The store-and-forward wait dominates the transfer by two orders of magnitude, so the upload queue responds to when the link is up and barely at all to how wide it is.</p>
+<p style="margin-bottom:0"><strong>This is the quantified argument for local inference</strong> that §9.5 asks E4 to settle. In this model the classifier already runs at the PHC, so the store-and-forward delay attaches only to the roughly 26% of patients who need a human read. A design that shipped every image out for inference would attach that same six-hour wait, at 0.3 availability, to every patient including the ones the system could have cleared on the spot - and would not be able to buy its way out with a fatter pipe. Local inference is necessary, not merely convenient, and the number that says so is the availability column rather than the bandwidth row.</p>
+</div>
+
+<p><strong>E5 - quality gate on against off.</strong> One paired comparison over the same 14-day window. Results: <code>results/20260901_225255_344_E5_quality_gate</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Quality gate</strong></td><td><strong>Grader-hours (14 d)</strong></td><td><strong>Cases reaching a human</strong></td><td><strong>Recapture attempts</strong></td><td><strong>Failed captures</strong></td><td><strong>Mean turnaround</strong></td></tr>
+<tr><td>Enabled</td><td>8.233</td><td>1,013</td><td>980</td><td>1,021</td><td>1.094 h</td></tr>
+<tr><td>Disabled</td><td>7.967</td><td>986</td><td>0</td><td>0</td><td>1.242 h</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>E5 does not show what §9.5 predicted it would, and the reason is structural</h4>
+<p><strong>Switching the quality gate off does not raise grader load. It lowers it, by 3.2%, and raises mean turnaround by 13.6%.</strong> The §9.5 entry expects the opposite and expects it to feed R6.2 in grader-hours. It does not, and the cause is in the model rather than in the result.</p>
+<p>With the gate on, an image that fails quality twice exhausts <code>maximumRecaptureAttempts</code> and is routed into the human-review path, because <code>failedCaptureRouting</code> is <code>escalate</code>. In this abstraction the gate therefore <em>manufactures</em> escalations rather than preventing them. With the gate off, no case escalates for quality at all and every image goes straight to the classifier. The system-level value §9.5 claims for the gate is that a classifier handed an ungradable image returns an unreliable grade - and <strong>this model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality</strong>, so it has no representation of that cost and cannot price it.</p>
+<p><strong>Read the 3.2% as a structural finding rather than as a measured difference.</strong> E5's two rows are a single window at a single seed, and enabling the gate changes which random draws land where, so the two arms are not paired beyond the seed. Differences of a few per cent between them are inside that noise. What E5 establishes is the mechanism, not the sign of a small number.</p>
+<p style="margin-bottom:0"><strong>The R6.2 claim for the quality gate must therefore be taken from §11.6, not from here</strong> - and on the validation split it is not measurable there either, because that split contains no ungradable image (511 gradable, 39 borderline, 0 ungradable), which is why A1 and A2 are identical to four decimal places. Making E5 answer the question §9.5 poses requires quality-conditioned sensitivity and specificity in the district model. That is an open item.</p>
+</div>
+
+<p><strong>E6 - bursty against smooth arrivals.</strong> The same weekly expected volume delivered either at a flat rate or with one high-volume camp day in seven and a reduced off-camp rate. Results: <code>results/20260901_225323_020_E6_arrival_pattern</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Arrival pattern</strong></td><td><strong>Peak queue length</strong></td><td><strong>Mean turnaround</strong></td><td><strong>p95 turnaround</strong></td><td><strong>Inside the 24 h target</strong></td></tr>
+<tr><td>Smooth</td><td>29</td><td>1.094 h</td><td>6.067 h</td><td>100%</td></tr>
+<tr><td>Bursty (camp days)</td><td><strong>117</strong></td><td>1.223 h</td><td>6.034 h</td><td>100%</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Camp-day bunching quadruples the queue and barely touches turnaround</h4>
+<p><strong>Peak queue length goes from 29 to 117, a factor of 4.0, while mean turnaround rises 11.8% and p95 turnaround does not move at all.</strong> Both patterns issue 100% of reports inside the 24-hour target. The queues absorb the burst, which answers the second half of §9.5's E6 question directly: buffering does fix it, and the buffering is already there.</p>
+<p style="margin-bottom:0"><strong>The cost of a camp day is queue depth, not report latency, and that is an operational finding rather than a capacity one.</strong> A peak of 117 waiting entities is 117 patients standing at a PHC, so the camp-day constraint is seating, staffing and daylight at the site rather than grader capacity downstream. Note the sampling: a 14-day window at one seed contains two camp days, so 117 is a peak over two of them and should be read as an order of magnitude rather than a precise maximum.</p>
+</div>
+
 <h1>10. Data Strategy and Validation Protocol</h1>
 
 <p class="lead">This section is the project's answer to the PS's charge that existing solutions "lack clinical validation rigor." It is also the section most likely to be undermined by an innocent shortcut, so it is written as rules rather than suggestions.</p>
@@ -1861,7 +1979,7 @@ A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
 <p>APTOS and IDRiD are Indian, which is favourable for our deployment target, but neither was collected under the field conditions the PS describes &mdash; handheld cameras, uncontrolled lighting, untrained operators. Our quality gate is designed for those conditions but is validated on data that largely does not contain them. Closing this gap requires field data we do not have.</p>
 
 <h2>17.8 Simulation is not deployment</h2>
-<p>The SimEvents model uses parameters partly measured from our own pipeline (rejection rate, inference latency, grader time) and partly assumed (arrival patterns, bandwidth, connectivity). It is a capacity-planning tool whose conclusions are conditional on those assumptions. State the assumptions alongside every result it produces.</p>
+<p>The SimEvents model's parameters are not uniformly measured, and which are which decides what its conclusions can carry. <strong>Measured from our own pipeline:</strong> inference latency, 0.715 s median per case (§11.3), and model sensitivity and specificity at the operating point frozen on 23 August (§11.2). <strong>Placeholders, not measurements, despite an earlier version of this paragraph naming both as measured:</strong> grader service time, which is the 30-second R4.5 target standing in until the §12 reader study reports a distribution, and the 21% quality rejection rate, which is the deployed-system field result quoted in §5.1 as external context and was never measured on our data. <strong>Scenario assumptions:</strong> arrival pattern and camp-day multiplier, capture time, image size, bandwidth, connectivity availability, PHC count, referable prevalence, and the turnaround target. The deferral rate is measured &mdash; 0.6727, §11.6 configuration A10 &mdash; but the configured 0.10 is deliberately a scenario value, so any sweep quoted at 0.10 describes a better system than the one that ships and must say so. It is a capacity-planning tool whose conclusions are conditional on all of the above. State the assumptions alongside every result it produces, as §9.5 and <code>docs/simulation_assumptions.md</code> do. <span class="tag v">Verified</span></p>
 
 <h1>18. References</h1>
 

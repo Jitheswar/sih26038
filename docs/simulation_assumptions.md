@@ -43,7 +43,7 @@ Capture time, quality-gate time, image size, bandwidth, connectivity availabilit
 The deferral rate is measured, and the configured value is deliberately not the measured one.
 
 Measured over the full validation split on 30 August 2026 with `eval/ablationHarness.m` configuration A10, which has been the shipped pipeline since its adoption on 31 August 2026, at the frozen operating point: autonomous coverage is 180 of 550 cases and 370 escalate, so the measured deferral rate is `0.6727`.
-That value is recorded as `measuredDeferralRate` in the district config, which is a record field and is not read by the model.
+That value is recorded as `measuredDeferralRate` in the district config. The model itself never reads it; `sweep_experiments.m` reads it so E3 can sweep the shipped pipeline's rate.
 Results: `results/20260830_232525_ablation_A1_A5`.
 
 Two earlier figures are superseded, and both are recorded here because each was quoted while it stood.
@@ -62,6 +62,8 @@ It is recorded here because it is the deferral rate the model would need if that
 
 The configured `deferralRate` of `0.10` is retained as a scenario value describing a decision policy that can act autonomously.
 No measured configuration reaches it, so any sweep run at `0.10` models a hypothetical improved system and must be labelled that way whenever its numbers are quoted.
+E3 therefore sweeps `measuredDeferralRate` as a point in its own right alongside the scenario grid, reading it from the configuration rather than from a constant in the sweep, so the experiment follows the shipped pipeline instead of going stale behind it.
+Its `isMeasuredPipelineRate` column marks which row describes the system as it ships.
 
 `maximumRecaptureAttempts` is a project policy value of two.
 `arrivalRate` is derived from annual volume and the simulation horizon.
@@ -112,10 +114,11 @@ Incomplete entities at the stop time remain in the event model and are not count
 Every experiment saves a dated directory containing the exact JSON configuration, result structure, CSV summary, and MATLAB plots.
 Existing results are never overwritten.
 
-## Sampling window for experiments E1-E4
+## Sampling window for experiments E1-E6
 
-A full 365-day, 100,000-entity run of every sweep point in E1-E4 is wall-clock expensive (tens of minutes per run).
+A full 365-day, 100,000-entity run of every sweep point in E1-E6 is wall-clock expensive (tens of minutes per run).
 `sweep_experiments.m` instead simulates a shorter window (`windowDays`, 14 by default) while holding the arrival rate at the true annual pace: it passes an explicit `ArrivalRate` override (`annualVolume / (365*86400)`) together with a shorter `SimulationDurationDays`, rather than deriving the rate from the short window.
 This yields steady-state queueing statistics — arrivals, service times, and routing decisions are unaffected by the window length — without the cost of simulating a full year.
 Annualised figures (grader-hours per year, minimum graders for a stated annual volume) are the short-window measurement scaled by `365 / windowDays`, and every such figure is labelled as extrapolated where it is reported.
+E1, E2 and E3 report annualised figures; E4, E5 and E6 report window quantities only and are not scaled.
 This window length is itself an assumption, traded for wall-clock feasibility; a longer window narrows sampling noise at proportionally higher run cost.

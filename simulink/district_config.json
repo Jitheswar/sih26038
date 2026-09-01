@@ -124,7 +124,7 @@
     },
     "measuredDeferralRate": {
       "assumed": false,
-      "source": "Measured 30 Aug 2026 over the validation split (n=550) with eval/ablationHarness.m configuration A10, the shipped pipeline since its adoption on 31 Aug 2026 in ad2f120, at the frozen operating point. Autonomous coverage 180 of 550, 370 escalated, deferral rate 0.6727. Results: results/20260830_232525_ablation_A1_A5. Supersedes two earlier figures: 1.00 on 24 Aug 2026, taken before the escalate-everything defect was fixed in 02cebfa, and 0.7255 on 30 Aug 2026 from configuration A5, which shipped until A10 was adopted. This is a record field and is not read by the model."
+      "source": "Measured 30 Aug 2026 over the validation split (n=550) with eval/ablationHarness.m configuration A10, the shipped pipeline since its adoption on 31 Aug 2026 in ad2f120, at the frozen operating point. Autonomous coverage 180 of 550, 370 escalated, deferral rate 0.6727. Results: results/20260830_232525_ablation_A1_A5. Supersedes two earlier figures: 1.00 on 24 Aug 2026, taken before the escalate-everything defect was fixed in 02cebfa, and 0.7255 on 30 Aug 2026 from configuration A5, which shipped until A10 was adopted. The model itself never reads this field; sweep_experiments.m reads it so E3 sweeps the shipped pipeline's rate alongside the scenario grid."
     }
   },
   "measuredDeferralRate": 0.6727

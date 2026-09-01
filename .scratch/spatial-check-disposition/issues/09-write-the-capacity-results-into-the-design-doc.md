@@ -1,13 +1,15 @@
-# Run the remaining capacity experiments E2 to E6
+# Write the capacity experiment results into the design document
 
 Status: ready-for-agent
 Blocked by: none
 
 ## Problem
 
-§9.5 specifies six capacity experiments for R5.2. `simulink/sweep_experiments.m` implements all six. `results/` contains only `E1_minimum_grader_count`, last run 23 August.
+§9.5 specifies six capacity experiments for R5.2. `simulink/sweep_experiments.m` implements all six and all six have been run, on 22 and 23 August.
 
-R5.1 and R5.2 are a fifth of the problem statement, and the design document calls §9 "the highest return-per-hour component in the entire problem statement". Five sixths of it is unrun.
+**Correction, 2 September 2026.** This ticket was originally written on the premise that only E1 had ever been run and that five sixths of R5.2 was outstanding. That was wrong: the search that produced it matched the literal string `E1` and so missed `E2_sensitivity_versus_workload` and its four siblings, which have existed since 22 August. The premise is withdrawn.
+
+What was actually outstanding is narrower and still worth doing. The experiments had been run but §9.5 of the design document carried no measured numbers from them, so the results existed only as CSVs in `results/` and nothing had been read off them or written down.
 
 ## Expected behaviour
 
@@ -25,6 +27,6 @@ Sweep points are short steady-state windows at the full configured arrival rate,
 
 ## Acceptance
 
-- Dated results directories for E1 through E6 from one consistent run
+- Dated results directories for E1 through E6 from one consistent run, with the reproduction against the August runs stated
 - §9.5 populated with the measured numbers and the scaling statement
 - Any annualised figure carries the statement of how it was scaled

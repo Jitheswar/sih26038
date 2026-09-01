@@ -141,6 +141,29 @@ Nothing downstream consumes the vessel network yet.
 §6.3 names three uses - venous beading for the 4-2-1 rule, vessel masking to suppress false haemorrhage detections, and neovascularisation features - and none are wired into the screening pipeline.
 Claiming the downstream benefit before it is measured is exactly what §11.1 exists to prevent.
 
+The SimEvents district capacity model (§9, R5.1 and R5.2) has been run end to end.
+All six optimisation experiments E1 to E6 come from one seeded invocation of `simulink/sweep_experiments.m` on 1 September 2026, each writing a dated results directory with the configuration it used.
+Every sweep point is a 14-day window held at the full annual arrival rate for 100,000 screenings a year, and every annual figure here is that window multiplied by 365/14 = 26.07 rather than a simulated year.
+The six reproduce the 23 August run of the same model to eight significant figures.
+
+At 100,000 screenings a year the district's human-review workload is 214.65 grader-hours, and the minimum grader count that meets the 24-hour turnaround target is one, at 2.45 per cent utilisation, unchanged at 50,000 and at 150,000 screenings a year.
+Read the headcount as a statement about the placeholder rather than about a district.
+Grader service time is the 30-second R4.5 target standing in until the §12 reader study reports a distribution, and the model's grader pool is available around the clock.
+Five minutes a case on an eight-hour day would multiply that utilisation by thirty; the workload figure scales with the service time and the headcount does not survive changing it.
+
+That 214.65 is also at the configured deferral rate of 0.10, which is a scenario value no measured configuration reaches.
+E3 therefore sweeps the rate the shipped pipeline actually defers at, 0.6727 from ablation A10, reading it from the configuration so the experiment cannot go stale behind the pipeline.
+At that rate the workload is 591.82 grader-hours a year, 2.76 times the scenario figure, and that is the number that describes what ships today.
+
+Connectivity availability, not bandwidth, is the binding infrastructure constraint.
+A twentyfold bandwidth increase moves mean turnaround by 3.1 per cent at 30 per cent connectivity availability, while raising availability from 30 to 90 per cent cuts it by about 97.5 per cent.
+At 8 MB a case the transfer takes seconds and the wait for the next connectivity window takes hours, which is the quantified case for keeping inference local rather than shipping every image out for it.
+Camp-day bunching quadruples the peak queue, 29 to 117, while moving mean turnaround by 11.8 per cent and p95 turnaround not at all, so the cost of a camp day is patients waiting on site rather than reports arriving late.
+
+Two experiments returned less than §9.5 expected of them, and both are recorded as such rather than reported as wins.
+E2 sweeps sensitivity with specificity held fixed, so it prices the extra true positives and not the extra false positives, and the sensitivity-against-grader-hours Pareto curve §9.5 calls for is not yet the curve §9.5 specifies.
+E5 shows the quality gate lowering grader load rather than raising it, because an image that exhausts its recaptures is routed to human review while the model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality, so this model has no way to price what the gate is actually for.
+
 ## Demo pack
 
 `~/sih-demo-cases` holds twelve real validation cases, one for each behaviour the pipeline can show, with the full annotated report exported for each.
@@ -220,6 +243,12 @@ Run the full test suite:
 
 ```bash
 matlab -batch "assertSuccess(runtests('tests','IncludeSubfolders',true))"
+```
+
+Run the district capacity experiments E1 to E6:
+
+```bash
+matlab -batch "addpath('simulink'); sweep_experiments()"
 ```
 
 Launch the demo UI:
