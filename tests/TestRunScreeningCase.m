@@ -175,9 +175,42 @@ classdef TestRunScreeningCase < matlab.unittest.TestCase
             end
         end
 
+        function reportDoesNotLabelAnAutoClearAsAnEscalation(testCase)
+            % Regression test. The report printed a hardcoded field named
+            % "Escalation reason:" whose value is the reason for whatever was
+            % decided, so an auto-cleared case rendered as
+            %   Escalation reason: Auto-clear: concordant, ...
+            % Anyone skimming the report reads "Escalation" and concludes the
+            % case escalated. The GUI carried the same label, over a helper
+            % already named localDecisionReason.
+            [imagePath, checkpointPath, calibrationPath, configPath] = ...
+                TestRunScreeningCase.inputs();
+            result = app.runScreeningCase(imagePath, checkpointPath, ...
+                calibrationPath, configPath);
+
+            resultsRoot = fullfile(tempdir, ['report_label_' ...
+                char(matlab.lang.makeValidName(datestr(now, 'HHMMSSFFF')))]);
+            testCase.addTeardown(@() TestRunScreeningCase.removeTree(resultsRoot));
+            generated = report.generate(result, 'ResultsRoot', resultsRoot);
+
+            reportText = fileread(strrep(char(generated.reportPath), ...
+                '.pdf', '.txt'));
+            testCase.verifySubstring(reportText, 'Decision reason:');
+            testCase.verifyFalse(contains(reportText, 'Escalation reason:'), ...
+                ['The report labels its decision-reason field as an ', ...
+                'escalation reason, which misreads on any case that did ', ...
+                'not escalate.']);
+        end
+
     end
 
     methods (Static, Access = private)
+        function removeTree(path)
+            if isfolder(path)
+                rmdir(path, 's');
+            end
+        end
+
         function [imagePath, checkpointPath, calibrationPath, configPath] = inputs()
             testFile = which('TestRunScreeningCase');
             projectRoot = fileparts(fileparts(testFile));
