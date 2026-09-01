@@ -94,7 +94,11 @@ run_matlab() {
     # tty without being stopped by SIGTTIN. The GUI needs that: MATLAB must
     # stay in its interactive configuration or every blocking dialog,
     # uigetfile included, refuses to open.
-    if [[ -r /dev/tty ]]; then
+    # -r only tests the device node's permission bits. A process with no
+    # controlling terminal passes that test and then fails on open with ENXIO,
+    # which is what happens under cron, CI, and other detached parents. Test
+    # that the device can actually be opened.
+    if { : < /dev/tty; } 2>/dev/null; then
         "$MATLAB_BIN" "$@" < /dev/tty &
     else
         "$MATLAB_BIN" "$@" < /dev/null &
