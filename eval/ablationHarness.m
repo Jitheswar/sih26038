@@ -489,6 +489,12 @@ decisions.evidenceSupportsCNN = false(n, 1);
 decisions.candidateCount = nan(n, 1);
 decisions.ruleCaseUnknown = false(n, 1);
 decisions.referableProbability = nan(n, 1);
+% The continuous quantity behind the §8.6 spatial verdict, recorded so the
+% boolean can be read against the cut it was taken at.  A patient the gate
+% caught just short of the cut and one it caught far short are different
+% findings, and the boolean cannot tell them apart.
+decisions.spatialStatistic = nan(n, 1);
+decisions.findingKinds = strings(n, 1);
 % The policy's own gates, not the frozen operating point.  frozen.threshold
 % is 0.40 and selects the reported sensitivity/specificity; the policy
 % refers at referableThreshold and clears below autoClearThreshold, and a
@@ -579,6 +585,14 @@ for index = 1:n
     decisions.candidateCount(index) = features.candidateCount(index);
     decisions.ruleCaseUnknown(index) = features.ruleCaseUnknown(index);
     decisions.referableProbability(index) = features.referableProbability(index);
+    decisions.findingKinds(index) = ...
+        string(strjoin(policyResult.findingKinds, ','));
+    evidence = features.spatialEvidence{index};
+    if ~isempty(evidence)
+        [~, clearedFraction] = grade.spatialVerdict(evidence, ...
+            localSpatialConstants(entry));
+        decisions.spatialStatistic(index) = clearedFraction;
+    end
 end
 end
 
@@ -684,6 +698,35 @@ else
 end
 end
 
+function rows = localPerCase(entry, decisions, split, evaluated, ...
+    truthReferable, autonomous, predictedReferable)
+%LOCALPERCASE One row per image for one configuration.
+%   truthReferable, autonomous and predictedReferable are already indexed
+%   by evaluated, so the rest is indexed the same way rather than
+%   recomputed, which keeps the rows reconciling with the aggregates by
+%   construction instead of by coincidence.
+missed = truthReferable & ~predictedReferable & autonomous;
+rows = table();
+rows.config = repmat(string(entry.id), sum(evaluated), 1);
+rows.image_id = split.imageIds(evaluated);
+rows.truth_grade = split.grades(evaluated);
+rows.truth_referable = truthReferable;
+rows.decision = decisions.decision(evaluated);
+rows.autonomous = autonomous;
+rows.missed_referable = missed;
+rows.calibrated_probability = decisions.referableProbability(evaluated);
+rows.cnn_level = decisions.predictedLevel(evaluated);
+rows.rule_level = decisions.ruleLevel(evaluated);
+rows.agreement_status = decisions.agreementStatus(evaluated);
+rows.agreement_basis = decisions.agreementBasis(evaluated);
+rows.spatially_agree = decisions.spatiallyAgree(evaluated);
+rows.spatial_statistic = decisions.spatialStatistic(evaluated);
+rows.evidence_supports_cnn = decisions.evidenceSupportsCNN(evaluated);
+rows.candidate_count = decisions.candidateCount(evaluated);
+rows.reason_codes = decisions.reason(evaluated);
+rows.finding_kinds = decisions.findingKinds(evaluated);
+end
+
 % -------------------------------------------------------------------- metrics
 
 function metrics = localMetrics(entry, decisions, split, frozen)
@@ -724,6 +767,14 @@ metrics.autonomousSubset = autoMetrics;
 metrics.autonomousAccuracy = autonomousAccuracy;
 metrics.missedReferable = sum(truthReferable & ~predictedReferable & autonomous);
 metrics.threshold = frozen.threshold;
+% Every column this function aggregates, kept per case.  The safety column
+% counts referable patients sent home and nothing recorded which ones they
+% were, so the one number a disposition turns on was the one number that
+% could not be inspected.  agreementLevelMismatch.m did this for
+% escalations; nothing did it for misses, and that is why the escalation
+% column got explained and the safety column did not.
+metrics.perCase = localPerCase(entry, decisions, split, evaluated, ...
+    truthReferable, autonomous, predictedReferable);
 metrics.decisionCounts = struct( ...
     'autoClear', sum(strcmp(decisions.decision, "auto-clear")), ...
     'refer', sum(strcmp(decisions.decision, "refer")), ...
@@ -781,6 +832,25 @@ fprintf(['\nSens and spec are over all cases at the frozen threshold. ' ...
     'coverage.\n']);
 end
 
+function localWritePerCase(resultsDirectory, perConfig)
+%LOCALWRITEPERCASE The rows behind every column the ablation table reports.
+%   Written by the harness rather than by a separate diagnostic, because
+%   the harness is where the numbers are produced and a column whose rows
+%   live somewhere else is a column nobody checks.
+rows = table();
+for index = 1:numel(perConfig)
+    if ~isfield(perConfig(index), 'perCase') || isempty(perConfig(index).perCase)
+        continue;
+    end
+    rows = [rows; perConfig(index).perCase]; %#ok<AGROW>
+end
+if isempty(rows)
+    return;
+end
+writetable(rows, fullfile(resultsDirectory, 'per_case.csv'), ...
+    'QuoteStrings', 'all');
+end
+
 function localWriteOutputs(resultsDirectory, perConfig, configs, split, frozen, options)
 summary = struct();
 summary.split = char(split.name);
@@ -817,6 +887,7 @@ for index = 1:numel(perConfig)
 end
 
 localWriteText(fullfile(resultsDirectory, 'ablation_table.csv'), strjoin(lines, newline));
+localWritePerCase(resultsDirectory, perConfig);
 localWriteText(fullfile(resultsDirectory, 'ablation_summary.json'), ...
     jsonencode(summary, 'PrettyPrint', true));
 save(fullfile(resultsDirectory, 'ablation_results.mat'), 'perConfig', '-v7.3');

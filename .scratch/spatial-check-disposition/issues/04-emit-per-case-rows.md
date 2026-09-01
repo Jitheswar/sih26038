@@ -1,6 +1,6 @@
 # Emit per-case rows from the ablation harness
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 ## Problem
@@ -32,3 +32,11 @@ This outlives the current decision: every future ablation gets an inspectable sa
 - `per_case.csv` written for every run, one row per image per configuration
 - Row counts reconcile exactly with every aggregate in `ablation_table.csv`
 - A test asserts the per-case rows reproduce the aggregate row for at least one configuration
+
+## Resolution
+
+`ablation_table.csv` is now accompanied by `per_case.csv`, one row per image per configuration, written by the harness itself. Row counts reconcile with every aggregate the table reports, and that reconciliation is the test rather than an assertion about it.
+
+The row carries the continuous spatial statistic as well as the boolean verdict, because a patient the gate caught just short of the cut and one it caught far short are different findings and the boolean cannot tell them apart.
+
+Visible immediately on a four-image smoke run: image `000c1434d8d7`, reference grade 2, CNN level 2 at a calibrated probability of 0.909, rule level 2, 85 candidates, escalated on `spatially inconsistent` with a spatial statistic of 0.0588 against a required 0.25. Both channels agreed the patient was referable and the gate escalated anyway, on a channel §8.3 records as unable to localise a lesion at that resolution, and not marginally.
