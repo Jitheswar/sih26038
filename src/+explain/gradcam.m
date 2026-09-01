@@ -45,6 +45,10 @@ if isstruct(checkpointFile)
     checkpoint = checkpointFile;
     checkpointFile = localCheckpointSource(checkpoint);
 else
+    % Check the caller's path before localRequireCheckpoint canonicalises it.
+    % Canonicalising resolves symlinks, so a link under data/sealed would
+    % otherwise arrive here as a path that no longer names the seal.
+    localRejectSealedPath(checkpointFile, 'checkpoint');
     checkpointFile = localRequireCheckpoint(checkpointFile);
     localRejectSealedPath(checkpointFile, 'checkpoint');
     checkpoint = localLoadCheckpoint(checkpointFile);
@@ -608,6 +612,21 @@ end
 normalizedPath = lower(strrep(char(path), '\\', '/'));
 if contains(normalizedPath, '/data/sealed/') || ...
         endsWith(normalizedPath, '/data/sealed')
+    error('explain:SealedData', ...
+        'The %s is inside data/sealed and cannot be used.', description);
+end
+% Comparing the literal text is not sufficient on its own. A path that has
+% already been through getCanonicalPath has had its symlinks resolved and no
+% longer mentions data/sealed, so compare the resolved forms as well. This is
+% what stops a link placed under the seal from carrying sealed material out.
+sealedRoot = fullfile(localProjectRoot(), 'data', 'sealed');
+if ~isfolder(sealedRoot)
+    return;
+end
+resolvedSealedRoot = char(java.io.File(sealedRoot).getCanonicalPath());
+resolvedPath = char(java.io.File(char(path)).getCanonicalPath());
+if strcmp(resolvedPath, resolvedSealedRoot) || ...
+        startsWith(resolvedPath, [resolvedSealedRoot filesep])
     error('explain:SealedData', ...
         'The %s is inside data/sealed and cannot be used.', description);
 end

@@ -71,6 +71,33 @@ classdef TestSealedDataProtection < matlab.unittest.TestCase
                 sealedSplit), 'grade:InvalidCalibrationSplit');
         end
 
+        function testGradCamRejectsASymlinkPlacedUnderTheSeal(testCase)
+            % Regression test. gradcam canonicalises the checkpoint path with
+            % getCanonicalPath before checking it, and canonicalising resolves
+            % symlinks. A link under data/sealed therefore used to reach the
+            % guard as a path outside the seal, and was accepted: the observed
+            % failure was explain:InvalidCheckpoint, meaning the file had been
+            % opened, rather than explain:SealedData.
+            testCase.assumeTrue(isunix, ...
+                'Symlink creation in this test assumes a Unix shell.');
+
+            outsideTarget = [tempname, '.mat'];
+            fclose(fopen(outsideTarget, 'w'));
+            linkPath = fullfile(TestSealedDataProtection.projectRoot(), ...
+                'data', 'sealed', 'symlink_regression_probe.mat');
+
+            testCase.addTeardown(@() TestSealedDataProtection.removeIfPresent(linkPath));
+            testCase.addTeardown(@() TestSealedDataProtection.removeIfPresent(outsideTarget));
+
+            [status, message] = system(sprintf('ln -sfn %s %s', ...
+                outsideTarget, linkPath));
+            testCase.assumeEqual(status, 0, ...
+                sprintf('Could not create the test symlink: %s', message));
+
+            testCase.verifyError(@() explain.gradcam(linkPath, ...
+                zeros(4, 4, 3), 2), 'explain:SealedData');
+        end
+
         function testReportGenerateRejectsSealedResultsRoot(testCase)
             sealedResultsRoot = fullfile(TestSealedDataProtection.projectRoot(), ...
                 'data', 'sealed', 'results');
@@ -84,6 +111,16 @@ classdef TestSealedDataProtection < matlab.unittest.TestCase
         function root = projectRoot()
             testFile = which('TestSealedDataProtection');
             root = fileparts(fileparts(testFile));
+        end
+
+        function removeIfPresent(path)
+            % java.io.File.delete removes a dangling symlink, which isfile and
+            % exist both report as absent once its target has gone. Teardowns
+            % run last-added-first, so the link outlives its target here.
+            f = java.io.File(path);
+            if f.exists() || java.nio.file.Files.isSymbolicLink(f.toPath())
+                f.delete();
+            end
         end
 
         function offenders = findMessidor2Entries(rawDir)
