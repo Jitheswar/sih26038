@@ -1,6 +1,6 @@
 # Record the Grad-CAM statistic behind the spatial check, not just its verdict
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## Problem

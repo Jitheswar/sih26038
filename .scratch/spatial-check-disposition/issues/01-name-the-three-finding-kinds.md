@@ -1,6 +1,6 @@
 # Name the three finding kinds, and split the disclosure bucket
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Problem
@@ -39,3 +39,7 @@ Behaviour-preserving refactor plus one new output field. No decision may change.
 - `grade.decisionPolicy` returns `findingKinds` parallel to `reasonCodes`
 - Every existing test passes with no expectation edited except to add coverage
 - New tests assert an advisory finding and a capability gap are distinguishable in the output, and that `escalateOnCapabilityGap` promotes only the latter
+
+## Resolution
+
+Landed in a19048d. decisionPolicy now collects safety exceptions, capability gaps and advisory findings separately and returns findingKinds parallel to reasonCodes. Reason-code order preserved.

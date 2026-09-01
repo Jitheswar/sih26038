@@ -1,6 +1,6 @@
 # Move the spatial check's constants into configuration
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 ## Problem

@@ -68,6 +68,25 @@ configuration.escalateOnCapabilityGap = localOptionalLogical(policy, ...
 % CNN prediction of Level 3 or 4 mismatches by construction.  Neither the
 % endpoint disagreements nor the under-detected case are given up by
 % 'endpoint': those are caught by the dedicated states above it.
+% The two constants of the §8.6 spatial test, defaulting to the values
+% that have always shipped so a configuration that does not mention them
+% behaves exactly as before.  They were magic numbers inside two copies of
+% the test until now, which §13.3 forbids ("every stage must be switchable
+% from configuration") and which §11.6 recorded as the one §8.6 state that
+% could not be switched from configuration at all.
+%
+% Neither was ever selected against data, and §8.3 records that the
+% Grad-CAM map at 448x448 is 14x14, one cell covering roughly 32x32 input
+% pixels, so the channel cannot localise a microaneurysm.  Naming them here
+% does not endorse them; it makes them measurable, which is what deciding
+% between keeping this gate and recalibrating it requires.
+configuration.spatialAttentionCut = localOptionalNumber(policy, ...
+    {'spatialAttentionCut', 'spatial_attention_cut'}, ...
+    'spatialAttentionCut', 0.35);
+configuration.spatialAgreementFraction = localOptionalNumber(policy, ...
+    {'spatialAgreementFraction', 'spatial_agreement_fraction'}, ...
+    'spatialAgreementFraction', 0.25);
+
 configuration.levelComparison = localOptionalChoice(policy, ...
     {'levelComparison', 'level_comparison'}, 'levelComparison', ...
     'exact', {'exact', 'endpoint'});
@@ -118,6 +137,14 @@ if ~ischar(value) || ~ismember(value, allowed)
     error('grade:InvalidDecisionConfiguration', ...
         '%s must be one of: %s.', label, strjoin(allowed, ', '));
 end
+end
+
+function value = localOptionalNumber(policy, names, label, defaultValue)
+if ~any(cellfun(@(name) isfield(policy, name), names))
+    value = defaultValue;
+    return;
+end
+value = localRequiredNumber(policy, names, label);
 end
 
 function value = localRequiredNumber(policy, names, label)

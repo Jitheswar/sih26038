@@ -1,6 +1,6 @@
 # Write the capacity experiment results into the design document
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Problem
@@ -30,3 +30,7 @@ Sweep points are short steady-state windows at the full configured arrival rate,
 - Dated results directories for E1 through E6 from one consistent run, with the reproduction against the August runs stated
 - §9.5 populated with the measured numbers and the scaling statement
 - Any annualised figure carries the statement of how it was scaled
+
+## Resolution
+
+Landed in 73f5702. E1-E6 re-run from one seeded invocation, reproducing August to eight significant figures, and §9.5 now carries the numbers. Turned up the §17.8 correction and the E3 deferral-rate defect.

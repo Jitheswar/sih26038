@@ -1,6 +1,6 @@
 # Add the equal-coverage safety veto metric
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 ## Problem
@@ -31,3 +31,7 @@ Expect the veto to be unable to discriminate finely at these counts. That is sta
 - `missesAtCoverage` with hand-computed unit tests, in the style of the other files in `eval/metrics/`
 - Ablation table carries the baseline column and the `admissible` verdict for every configuration
 - A test covers the boundary case where coverage is 1.0 and the answer must equal the classifier's own miss count
+
+## Resolution
+
+Landed in cfff805 (metric) and d53cb83 (application). missesAtCoverage counts false negatives only and drops tied groups at the boundary, erring toward vetoing. equalCoverageVeto applies it to an ablation table and refuses to run if its reconstructed classifier disagrees with the harness A1 row.
