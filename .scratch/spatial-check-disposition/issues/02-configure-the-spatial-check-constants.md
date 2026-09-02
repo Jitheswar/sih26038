@@ -1,6 +1,6 @@
 # Move the spatial check's constants into configuration
 
-Status: claimed
+Status: resolved
 Blocked by: 01
 
 ## Problem
@@ -32,3 +32,7 @@ This ships regardless of which disposition wins for the check itself. It is a §
 - One shared `grade.spatialAgreement`, no second copy anywhere
 - `TestAblationHarness` drift pin still passes
 - Full suite green with no numeric expectation changed
+
+## Resolution
+
+Landed in 0cfaef9. `spatialAttentionCut` and `spatialAgreementFraction` are named in `config/*.json` under `decision_policy`, validated by `decisionConfiguration`, defaulting to the values that always shipped. The two inline copies of the test are gone: `grade.spatialAgreement` is the single implementation and both `app.runScreeningCase` and `eval/ablationHarness.m` reach it.
