@@ -1,0 +1,59 @@
+# Sweep the spatial check constants on the calibration split
+
+Status: ready-for-agent
+Blocked by: 03
+
+## Problem
+
+D2, keeping the gate but recalibrating it, is the option nobody has measured. The current constants were never selected against data.
+
+## Expected behaviour
+
+One cached pass over the **calibration** split (n=365), then an offline sweep of `(spatialAttentionCut, spatialAgreementFraction)` over the cached candidate-point values.
+
+Selection split discipline: sweep on calibration, following the precedent set for the lesion evidence thresholds in `636f803`; report on validation. Validation already selected the training epoch and carries every ablation number, and is not also used to select these constants.
+
+**Do not sweep for maximum coverage.** Tuning a safety gate on the number §11.6 says not to select on is the trap. The question is whether the constants can discriminate at all: does any pair separate the referable-sent-home cases from the rest by more than chance?
+
+Report the surface, not a winner. If no pair separates the classes, that is the finding and it retires the gate on evidence rather than on §8.6's wording alone.
+
+## Notes
+
+Roughly 50 minutes for the calibration cached pass; the sweep itself is offline and fast.
+
+## Acceptance
+
+- Dated results directory with the swept surface over both constants
+- A written verdict on whether any pair discriminates, with the separation statistic
+- An explicit statement that coverage was not the selection objective
+
+## Comments
+
+### Objective sharpened, 1 September 2026
+
+The preliminary veto computation in issue 06 rejects A11 and A12, so demoting the gate is dead and D2 is now the only remaining route to coverage above A10's 0.3273.
+
+That sharpens what the sweep is looking for. It is not "do these constants discriminate" in the abstract. It is:
+
+**Does any (cut, fraction) pair raise coverage above 0.3273 while keeping referable-sent-home at or below the classifier's count at that same coverage?**
+
+Note the baseline moves as coverage rises: A1 sends nobody home up to coverage 0.700, one patient at 0.738, and four at 1.000. So a recalibrated gate reaching coverage 0.70 must still send nobody home to remain admissible, while one reaching 0.74 is allowed a single miss.
+
+If no pair clears that bar, the finding is that the gate cannot be tuned into admissibility and A10 stands as shipped. That is a perfectly good answer and it should be reported as one rather than treated as a failed experiment.
+
+### Objective sharpened again, 2 September 2026
+
+The per-case records of issue 06 change what this sweep is allowed to optimise.
+
+The gate is now the only mechanism escalating `d1a24527a15d`, a proliferative patient the classifier calls Level 1 at 0.0593. Its spatial statistic is 0.0000, and the other three cases the classifier misses sit at 0.0000, 0.2044 and 0.3056.
+
+**Recalibrating to raise coverage moves the cut on exactly the statistic that separates those four from the rest, and the patient it would most easily lose is the proliferative one.** Raising `spatialAgreementFraction` above 0.3056 would keep all four; lowering the cut to buy coverage risks `5a2c27b95c7c` at 0.3056 first, then `caec68f11c86` at 0.2044.
+
+So the sweep is scored on a constraint before an objective:
+
+- **Constraint**: does this (cut, fraction) pair still escalate all four of the classifier's misses? A pair that does not is rejected regardless of what it does to coverage.
+- **Objective, subject to that**: coverage.
+
+Report the surface with the four patients marked on it, so the boundary where each is lost is visible rather than implied.
+
+The data for this already exists. `results/20260902_052342_ablation_A1_A5/per_case.csv` carries the spatial statistic per case per configuration, so the constraint can be evaluated offline for any pair without a further GPU pass. A fresh calibration-split pass is still wanted for selection discipline, but the validation-split surface can be drawn now.

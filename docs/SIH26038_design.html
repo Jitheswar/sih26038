@@ -155,6 +155,7 @@ hr{border:none; border-top:.5px solid var(--rule); margin:5mm 0}
 <tr><td>Fix, 24 Aug 2026, §11.6 harness drift</td><td><strong>The ablation harness held its own copy of the evidence construction and would have kept measuring the old pipeline.</strong> <code>eval/ablationHarness.m</code> duplicated <code>localICDREvidence</code> and <code>localEvidenceSupportsCNN</code> from <code>app.runScreeningCase</code>, with a comment that <code>TestAblationHarness</code> fails if they stop matching. Fixing the deployed path alone would have left the harness measuring a system that no longer existed. Both callers now delegate to <code>grade.icdrEvidenceFromDetection</code> and <code>grade.evidenceSupportsCNN</code>, so the schema cannot drift. Two copies of an evidence schema is precisely how an evaluation path diverges from the deployed one while still passing its own tests. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, §8.6 evidence support check</td><td><strong>A Level 1 prediction was treated as contradicted by its own defining finding.</strong> <code>localEvidenceSupportsCNN</code> required <code>candidateCount == 0</code> for any non-referable prediction. ICDR Level 1 is defined as microaneurysms only, so a Level 1 image is supposed to carry candidates, and counting them as evidence against a Level 1 call inverts the scale. The check now asks whether the rule engine also reads the evidence as non-referable. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, demo entry point</td><td><strong>The integrated demo ran a pre-freeze model.</strong> <code>eval/appSmoke.m</code> hardcoded <code>results/20260822_030539/best_model.mat</code> and <code>results/20260822_091625/temperature_fit.mat</code>, both of which predate the operating point frozen on 23 August, so the demo graded with one model while every published figure came from another. It now reads <code>operating_point.model</code> and <code>operating_point.calibration</code> from <code>config/default.json</code>. Separately, the <code>localDecisionConfig</code> fallback in <code>app.runScreeningCase</code> still carried the pre-freeze <code>autoClearThreshold</code> 0.20 and now carries 0.40. <span class="tag v">Verified</span></td></tr>
+<tr><td>Added, 1 Sep 2026, §9.5 results / Correction, §17.8</td><td><strong>E1 to E6 are run and §9.5 carries measured numbers.</strong> All six come from one seeded invocation of <code>simulink/sweep_experiments.m</code> and reproduce the 23 August run of the same model to eight significant figures. Two entries in §9.5's plan do not survive contact with the measurement and are recorded as such rather than quietly reported: E2 sweeps sensitivity with specificity held fixed, so it prices extra true positives and not the extra false positives §9.5 describes, and the headline Pareto curve is therefore not yet the curve §9.5 specifies; E5 shows the quality gate lowering grader load rather than raising it, because an image that exhausts its recaptures is routed to human review while the model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality. <strong>E3 now sweeps the measured deferral rate as well as the scenario grid</strong>, read from <code>measuredDeferralRate</code> in the district configuration, because the grid stopped at 0.30 while the shipped pipeline defers at 0.6727 and every §9.5 figure would otherwise have described a system nobody runs. <strong>§17.8 named the quality rejection rate and the grader service time as measured from our own pipeline. Both are placeholders</strong> and always were: the 21% is the §5.1 field result from a deployed system elsewhere, and the 30 seconds is the R4.5 target awaiting the §12 reader study. That paragraph is corrected and now partitions every district parameter into measured, placeholder, and scenario. <span class="tag v">Verified</span></td></tr>
 <tr><td>Fix, 24 Aug 2026, test suite</td><td><strong>A test asserted the defect.</strong> <code>TestRunScreeningCase.completedCaseHasEveryChannel</code> pinned <code>decision == 'escalate'</code> on an ordinary gradable image, so a pipeline that escalated all 550 validation cases kept a green suite. It now asserts that a capability gap does not by itself route a case to a human, that the gap is still disclosed in the explanation and the warnings, and that the reachable rule level is capped. Eleven further tests were added across <code>TestICDRule</code> and <code>TestDecisionPolicy</code> covering the partition, the reachable-level cap, the disclosure path, the case-level unknown that must still escalate, and <code>escalateOnCapabilityGap</code> restoring the conservative policy. <span class="tag v">Verified</span></td></tr>
 </tbody>
 </table>
@@ -1036,6 +1037,123 @@ AGREEMENT      Rule path and CNN agree
 
 <p><strong>Headline deliverable from this component:</strong> a Pareto curve of screening sensitivity against annual grader-hours, with the PS's &gt;90% sensitivity target marked on it, and a stated minimum viable grader count for a district of 100,000 screenings per year. That is a genuine operations-research result derived from your own measured model parameters, and no other team will have one.</p>
 
+<h3>§9.5 measured results - 1 September 2026, E1 to E6</h3>
+
+<p>All six experiments come from one invocation of <code>simulink/sweep_experiments.m</code> against the committed <code>simulink/district_config.json</code> at seed 42, running the SimEvents model in <code>simulink/district_model.slx</code>. Results directories are named below, each holding the sweep CSV, the plots, and the exact configuration the run used. E1 to E6 reproduce the 23 August run of the same model to eight significant figures, which is the check that nothing the model reads has drifted since the operating point was frozen.</p>
+
+<div class="box warn">
+<h4>How every annualised figure below was scaled</h4>
+<p>Each sweep point simulates a <strong>14-day window held at the full annual arrival rate</strong> of 100,000 / (365 &times; 86,400) = 3.1710&times;10<sup>-3</sup> patients per second. The window is shortened by overriding the simulation duration only; the rate is passed explicitly rather than derived from the short window, so arrivals, service times and routing are unaffected by the window length and the sample is of steady-state queueing behaviour, not of a scaled-down district.</p>
+<p style="margin-bottom:0"><strong>Every annual figure on this page is that 14-day measurement multiplied by 365/14 = 26.07. It is an extrapolation from a steady-state window, not a simulated year.</strong> The window length is itself an assumption traded against wall-clock cost, and a longer window would narrow sampling noise at proportionally higher run cost. Every number here is conditional on the configured parameters, several of which are still placeholders rather than measurements: see <code>docs/simulation_assumptions.md</code> and §17.8.</p>
+</div>
+
+<p><strong>E1 - minimum grader count at a fixed annual volume.</strong> Sweeps 1 to 12 graders, stopping at the first count that issues 95% of reports inside the 24-hour turnaround target. Results: <code>results/20260901_224717_814_E1_minimum_grader_count</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Annual volume</strong></td><td><strong>Minimum graders</strong></td><td><strong>Reports inside the 24 h target</strong></td><td><strong>Grader utilisation</strong></td></tr>
+<tr><td>50,000</td><td>1</td><td>100%</td><td>&mdash;</td></tr>
+<tr><td><strong>100,000</strong></td><td><strong>1</strong></td><td><strong>100%</strong></td><td><strong>0.0245</strong></td></tr>
+<tr><td>150,000</td><td>1</td><td>100%</td><td>&mdash;</td></tr>
+<tr><td colspan="4">14-day window at 100,000/year: 3,835 patients generated, 2,822 auto-cleared, 583 referred, 430 escalated, 1,013 reaching a human. Grader work 8.233 hours over the window, mean turnaround 1.094 h, p95 6.067 h. <span class="tag v">Verified</span></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The headline answer is one grader, and the headcount is the wrong number to quote</h4>
+<p><strong>One grader clears every report inside the target at 100,000 screenings a year, at 2.45% utilisation, and the same holds at 50,000 and at 150,000.</strong> The sweep cannot find a binding constraint because at the configured service time there is not one: 1,013 human reads over 14 days at 30 seconds each is 8.2 hours of work, and no queue forms behind it.</p>
+<p>Two configured values produce that, and neither is measured. <code>graderServiceTimeSeconds</code> is a <strong>30-second placeholder</strong> standing in for the R4.5 target until the §12 reader study reports an actual service-time distribution, and the SimEvents Resource Pool is continuously available, with no shifts, leave, or working hours. A grader who takes five minutes a case rather than thirty seconds does ten times the work per read, and one who works an eight-hour day rather than round the clock has a third of the window to do it in. Those two together multiply the 2.45% utilisation by thirty, to roughly 74%, and at that point E1 has something to find. <strong>Until the reader study lands, "one grader is enough" is a statement about the placeholder, not about a district.</strong></p>
+<p style="margin-bottom:0">The figure that survives those two assumptions is the workload rather than the headcount: <strong>214.65 grader-hours per year</strong> at 100,000 screenings, extrapolated from the 14-day window as described above. That number scales with the service time linearly and is the one to quote, alongside the service time it assumes.</p>
+</div>
+
+<p><strong>E2 - AI operating point against grader workload.</strong> Sweeps model sensitivity at a deliberately generous 12 graders, so the review queue is not the bottleneck and grader-hours track referral volume rather than queueing. Results: <code>results/20260901_224917_012_E2_sensitivity_versus_workload</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Model sensitivity</strong></td><td>0.80</td><td>0.85</td><td><strong>0.90</strong></td><td>0.93</td><td><strong>0.95</strong></td><td>0.97</td></tr>
+<tr><td><strong>Annual grader-hours (extrapolated)</strong></td><td>203.14</td><td>206.83</td><td><strong>209.44</strong></td><td>211.18</td><td><strong>213.57</strong></td><td>215.09</td></tr>
+<tr><td>Referrals in the 14-day window</td><td>528</td><td>545</td><td>558</td><td>566</td><td>578</td><td>585</td></tr>
+<tr><td>False-positive share of workload</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td><td>0.07497</td></tr>
+</tbody>
+</table>
+<p>Escalations are constant at 430 across all six points, as they must be: the deferral rate is not what this sweep moves. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>The move the PS cares about costs about four grader-hours a year, and this sweep measures only half of it</h4>
+<p><strong>Raising sensitivity from 0.90 to 0.95 - the move §9.5 names - costs 4.13 grader-hours per year, under 2%.</strong> Across the whole swept range, 0.80 to 0.97, the cost is 11.95 grader-hours per year, 5.9%. On these parameters the sensitivity margin a screening tool wants is close to free in capacity terms, which is the right direction for §3's asymmetry between a missed referable patient and a wasted appointment.</p>
+<p><strong>The number is small partly because the sweep is not yet the one §9.5 specifies.</strong> It overrides <code>ModelSensitivity</code> alone and leaves <code>ModelSpecificity</code> at the frozen 0.9167, so every extra referral it produces is a true positive and the false-positive share of the workload is invariant at 0.07497 by construction - the same figure in all six rows above. §9.5 describes sensitivity as bought with false positives, and that is a movement along the classifier's ROC curve, which this sweep does not make. What E2 currently establishes is the grader cost of catching more true positives; the cost of the false positives that a real threshold change would also buy is not in these numbers.</p>
+<p style="margin-bottom:0"><strong>The headline Pareto curve of §9.5 is therefore not yet the curve §9.5 asks for.</strong> Making it so requires pairing each sensitivity with the specificity the calibrated model actually reaches there, which is available - <code>results/20260824_035401_full_metrics_validation</code> records the full ROC, 551 points, AUC 0.9847 - and requires the district configuration to name which ROC it walks and on which split. That is an open item, recorded here rather than papered over, and until it is closed the E2 figures must be quoted as the true-positive half of the trade-off rather than as the trade-off.</p>
+</div>
+
+<p><strong>E3 - deferral threshold against human capacity.</strong> Sweeps the deferral rate at 12 graders. The scenario grid runs to 0.30; the rate the shipped pipeline actually measures is appended as its own point, read from <code>measuredDeferralRate</code> in the configuration so it follows the pipeline instead of going stale behind it. Results: <code>results/20260901_225104_283_E3_deferral_threshold</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Deferral rate</strong></td><td><strong>Annual grader-hours</strong></td><td><strong>Auto-cleared share</strong></td><td><strong>Cases reaching a human (14 d)</strong></td><td><strong>Of which deferral-driven</strong></td></tr>
+<tr><td>0.02</td><td>160.12</td><td>80.3%</td><td>755</td><td>84</td></tr>
+<tr><td>0.05</td><td>180.33</td><td>77.8%</td><td>850</td><td>198</td></tr>
+<tr><td>0.10 <span class="small">configured scenario value</span></td><td>214.65</td><td>73.6%</td><td>1,013</td><td>389</td></tr>
+<tr><td>0.15</td><td>249.42</td><td>69.3%</td><td>1,177</td><td>587</td></tr>
+<tr><td>0.20</td><td>284.83</td><td>65.0%</td><td>1,343</td><td>784</td></tr>
+<tr><td>0.30</td><td>352.83</td><td>56.7%</td><td>1,662</td><td>1,178</td></tr>
+<tr><td><strong>0.6727</strong> <span class="small">measured, the pipeline that ships</span></td><td><strong>591.82</strong></td><td><strong>27.4%</strong></td><td><strong>2,784</strong></td><td><strong>2,543</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>What the safety mechanism costs, and the word "coverage" meaning two different things</h4>
+<p><strong>The escalation path is close to linear in grader-hours.</strong> Over the scenario grid, each additional point of deferral rate costs about 6.9 grader-hours a year; the auto-cleared share falls from 80.3% at a 0.02 deferral rate to 56.7% at 0.30. §8.6's safety mechanism therefore has a price that can be stated in specialist time rather than argued about qualitatively, which is what E3 exists to produce.</p>
+<p><strong>The rate the pipeline actually defers at costs 591.82 grader-hours a year, 2.76 times the 214.65 the configured scenario value implies.</strong> The configured <code>deferralRate</code> of 0.10 is a scenario value describing a decision policy that can act autonomously, and no measured configuration reaches it: the shipped pipeline, §11.6 configuration A10, escalates 370 of 550 validation cases, a deferral rate of <strong>0.6727</strong>. That point is now swept in its own right, read from <code>measuredDeferralRate</code> in the district configuration so it follows the pipeline rather than going stale behind it. Its non-deferred fraction, 1,051 auto-cleared plus 200 referred out of 3,835, is 32.6% against A10's measured coverage of 0.3273, which is the check that the capacity model routes the caseload the way the pipeline it represents decides it. Every figure quoted at 0.10 describes a hypothetical improved system and must be labelled that way; the figure that describes what we ship today is 591.82 grader-hours a year. <span class="tag v">Verified</span></p>
+<p style="margin-bottom:0"><strong>Do not read E3's auto-cleared share as the coverage of §11.6.</strong> CONTEXT.md defines coverage as auto-clear plus refer, the fraction the pipeline decides without a human. In this capacity model a referred patient still consumes a grader read - refer and escalate both enter the upload queue and then the grader queue - so the column above counts auto-clears only. The two numbers answer different questions and are not comparable; at the same deferral rate the §11.6 coverage is the larger of the two.</p>
+</div>
+
+<p><strong>E4 - bandwidth and connectivity duty cycle.</strong> Three bandwidths crossed with two connectivity availabilities, at the configured 8 MB per case. Results: <code>results/20260901_225225_193_E4_bandwidth</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Connectivity</strong></td><td><strong>1 Mbps</strong></td><td><strong>5 Mbps</strong></td><td><strong>20 Mbps</strong></td><td><strong>Peak upload queue</strong></td></tr>
+<tr><td>0.3 availability - mean turnaround</td><td>6.295 h</td><td>6.102 h</td><td>6.100 h</td><td>65</td></tr>
+<tr><td>0.9 availability - mean turnaround</td><td>0.1587 h</td><td>0.1420 h</td><td>0.1394 h</td><td>9</td></tr>
+<tr><td>0.3 availability - p95 turnaround</td><td>15.80 h</td><td>15.73 h</td><td>15.72 h</td><td>&mdash;</td></tr>
+<tr><td>0.9 availability - p95 turnaround</td><td>1.093 h</td><td>1.068 h</td><td>1.065 h</td><td>&mdash;</td></tr>
+</tbody>
+</table>
+<p>All six points issue 100% of reports inside the 24-hour target. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>Connectivity is the constraint and bandwidth is not, by two orders of magnitude</h4>
+<p><strong>A twentyfold increase in bandwidth buys 3.1% of mean turnaround at 0.3 availability and 12.2% at 0.9. Raising availability from 0.3 to 0.9 at fixed bandwidth cuts it by 97.5% at 1 Mbps and 97.7% at 20 Mbps.</strong> The arithmetic behind that is not subtle: at 8 MB a case, the transfer itself takes 64 seconds at 1 Mbps and 3.2 seconds at 20 Mbps, while a district on a 30% duty cycle waits hours for the next window. The store-and-forward wait dominates the transfer by two orders of magnitude, so the upload queue responds to when the link is up and barely at all to how wide it is.</p>
+<p style="margin-bottom:0"><strong>This is the quantified argument for local inference</strong> that §9.5 asks E4 to settle. In this model the classifier already runs at the PHC, so the store-and-forward delay attaches only to the roughly 26% of patients who need a human read. A design that shipped every image out for inference would attach that same six-hour wait, at 0.3 availability, to every patient including the ones the system could have cleared on the spot - and would not be able to buy its way out with a fatter pipe. Local inference is necessary, not merely convenient, and the number that says so is the availability column rather than the bandwidth row.</p>
+</div>
+
+<p><strong>E5 - quality gate on against off.</strong> One paired comparison over the same 14-day window. Results: <code>results/20260901_225255_344_E5_quality_gate</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Quality gate</strong></td><td><strong>Grader-hours (14 d)</strong></td><td><strong>Cases reaching a human</strong></td><td><strong>Recapture attempts</strong></td><td><strong>Failed captures</strong></td><td><strong>Mean turnaround</strong></td></tr>
+<tr><td>Enabled</td><td>8.233</td><td>1,013</td><td>980</td><td>1,021</td><td>1.094 h</td></tr>
+<tr><td>Disabled</td><td>7.967</td><td>986</td><td>0</td><td>0</td><td>1.242 h</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>E5 does not show what §9.5 predicted it would, and the reason is structural</h4>
+<p><strong>Switching the quality gate off does not raise grader load. It lowers it, by 3.2%, and raises mean turnaround by 13.6%.</strong> The §9.5 entry expects the opposite and expects it to feed R6.2 in grader-hours. It does not, and the cause is in the model rather than in the result.</p>
+<p>With the gate on, an image that fails quality twice exhausts <code>maximumRecaptureAttempts</code> and is routed into the human-review path, because <code>failedCaptureRouting</code> is <code>escalate</code>. In this abstraction the gate therefore <em>manufactures</em> escalations rather than preventing them. With the gate off, no case escalates for quality at all and every image goes straight to the classifier. The system-level value §9.5 claims for the gate is that a classifier handed an ungradable image returns an unreliable grade - and <strong>this model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality</strong>, so it has no representation of that cost and cannot price it.</p>
+<p><strong>Read the 3.2% as a structural finding rather than as a measured difference.</strong> E5's two rows are a single window at a single seed, and enabling the gate changes which random draws land where, so the two arms are not paired beyond the seed. Differences of a few per cent between them are inside that noise. What E5 establishes is the mechanism, not the sign of a small number.</p>
+<p style="margin-bottom:0"><strong>The R6.2 claim for the quality gate must therefore be taken from §11.6, not from here</strong> - and on the validation split it is not measurable there either, because that split contains no ungradable image (511 gradable, 39 borderline, 0 ungradable), which is why A1 and A2 are identical to four decimal places. Making E5 answer the question §9.5 poses requires quality-conditioned sensitivity and specificity in the district model. That is an open item.</p>
+</div>
+
+<p><strong>E6 - bursty against smooth arrivals.</strong> The same weekly expected volume delivered either at a flat rate or with one high-volume camp day in seven and a reduced off-camp rate. Results: <code>results/20260901_225323_020_E6_arrival_pattern</code>.</p>
+<table class="kv">
+<tbody>
+<tr><td><strong>Arrival pattern</strong></td><td><strong>Peak queue length</strong></td><td><strong>Mean turnaround</strong></td><td><strong>p95 turnaround</strong></td><td><strong>Inside the 24 h target</strong></td></tr>
+<tr><td>Smooth</td><td>29</td><td>1.094 h</td><td>6.067 h</td><td>100%</td></tr>
+<tr><td>Bursty (camp days)</td><td><strong>117</strong></td><td>1.223 h</td><td>6.034 h</td><td>100%</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Camp-day bunching quadruples the queue and barely touches turnaround</h4>
+<p><strong>Peak queue length goes from 29 to 117, a factor of 4.0, while mean turnaround rises 11.8% and p95 turnaround does not move at all.</strong> Both patterns issue 100% of reports inside the 24-hour target. The queues absorb the burst, which answers the second half of §9.5's E6 question directly: buffering does fix it, and the buffering is already there.</p>
+<p style="margin-bottom:0"><strong>The cost of a camp day is queue depth, not report latency, and that is an operational finding rather than a capacity one.</strong> A peak of 117 waiting entities is 117 patients standing at a PHC, so the camp-day constraint is seating, staffing and daylight at the site rather than grader capacity downstream. Note the sampling: a 14-day window at one seed contains two camp days, so 117 is a peak over two of them and should be read as an order of magnitude rather than a precise maximum.</p>
+</div>
+
 <h1>10. Data Strategy and Validation Protocol</h1>
 
 <p class="lead">This section is the project's answer to the PS's charge that existing solutions "lack clinical validation rigor." It is also the section most likely to be undermined by an innocent shortcut, so it is written as rules rather than suggestions.</p>
@@ -1424,6 +1542,119 @@ AGREEMENT      Rule path and CNN agree
 <p><strong>Why A10 and not A12.</strong> A10 is a defect repair with no measured cost: it dominates the shipped A5 on both axes at once, 180 autonomous cases against 151 at zero referable patients sent home against one, and the checks above the level comparison are unchanged and still mandatory. It required no clinical judgement because nothing was traded away. A12&apos;s second repair demotes the Grad-CAM spatial check from a gate to an advisory flag, which is the clinical judgement named in the paragraph above, so it stays a recommendation awaiting the §12 review. <span class="tag k">Established</span></p>
 <p><strong>What the adoption changed in the test suite.</strong> Three pins failed and all three encoded the previous shipped configuration rather than a regression. <code>TestAblationHarness</code>&apos;s drift pin was re-pointed from A5 to A10, since its property is that the harness reproduces the deployed pipeline and the deployed pipeline moved. <code>TestLesionSegmentation</code>&apos;s guard required the learned channel to stay switched off &quot;until its thresholds are re-selected against APTOS-domain data&quot;; that condition was met in <code>636f803</code>, so the pin moved rather than being removed and now requires that the channel be read only through the APTOS-selected hard-exudate head at 0.99. <code>TestRunScreeningCase</code> pinned seven capability-gap fields and an unreachable referral level, which are six and reachable once the hard-exudate head supplies evidence. Full suite after the change: 252 passed, 0 failed. <span class="tag v">Verified</span></p>
 <p><strong>The repair is visible on a single image.</strong> The screening-case test&apos;s explanation string now reads <code>CNN ICDR level: 0. ICDR rule level: 1. Agreement: concordant</code>. Under exact equality those two levels were a mismatch routed to a human; under the endpoint comparison they agree, because both place the patient below the referral boundary. That case is one of the 142 in the largest cell of the mismatch table above. <span class="tag v">Verified</span></p>
+</div>
+
+<h3>§11.6 measured results - 2 September 2026, the equal-coverage veto and A14</h3>
+
+<p>The A10-A13 table above compares configurations that decide different fractions of the caseload on raw miss counts. That comparison is unmatched, and correcting it changes which configurations are admissible and raises a question this section had not asked.</p>
+
+<div class="box warn">
+<h4>The comparison this section was making, and why it flatters the pipeline</h4>
+<p>A13 was rejected on 31 August for sending 4 referable patients home out of the 406 cases it decided, against the classifier's 4 out of all 550. Those denominators cover different case mixes. A deferral pipeline sheds exactly the low-confidence cases where a classifier's errors concentrate, so its count over a self-selected subset is not comparable to a classifier's count over everything, and the size of the discrepancy is unknown until it is measured.</p>
+<p style="margin-bottom:0"><code>eval/metrics/riskCoverage.m</code> already existed to prevent this. Its own documentation names the comparison: "§11.6 asks for exactly this comparison: A5 against A1 at equal coverage." <code>eval/ablationHarness.m</code> prints <em>Compare A5 with A1 at equal coverage</em> at the foot of every run. Neither the A1-A5 table nor the A10-A13 table did it. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The veto.</strong> <a href="../adr/0001-equal-coverage-safety-veto.md">ADR 0001</a> states the criterion: a configuration is inadmissible if it sends more referable patients home than the classifier alone does <em>at the same coverage</em>. The baseline is the classifier's own confidence ranking, using the definitions of <code>eval/fullMetricReport.m</code> unchanged. It counts false negatives only, because a patient referred unnecessarily is a different and recoverable event. It reads the point estimate, because the intervals on these counts overlap heavily. It is a veto and never a ranking. Computed by <code>eval/equalCoverageVeto.m</code>, which reconstructs the classifier baseline from per-case probabilities and refuses to run if that reconstruction disagrees with the harness's own A1 row on either the miss count or the routing.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Coverage</strong></td><td><strong>Sends home</strong></td><td><strong>Classifier at the same coverage</strong></td><td><strong>Admissible</strong></td></tr>
+<tr><td>A4 - CNN + quality gate + deferral</td><td>0.8382</td><td>4</td><td>1</td><td><strong>No</strong></td></tr>
+<tr><td>A5 - classical, shipped until 31 Aug</td><td>0.2745</td><td>1</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A9 - learned, hard exudates</td><td>0.0691</td><td>0</td><td>0</td><td>Yes</td></tr>
+<tr><td><strong>A10 - learned, endpoint levels, shipped</strong></td><td><strong>0.3273</strong></td><td><strong>0</strong></td><td><strong>0</strong></td><td><strong>Yes</strong></td></tr>
+<tr><td>A11 - learned, spatial advisory</td><td>0.2436</td><td>2</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A12 - learned, both repairs</td><td>0.6636</td><td>2</td><td>0</td><td><strong>No</strong></td></tr>
+<tr><td>A13 - classical, both repairs</td><td>0.7382</td><td>4</td><td>1</td><td><strong>No</strong></td></tr>
+</tbody>
+</table>
+
+<p>The reason is that the classifier's four misses all sit deep in its own low-confidence tail, at confidence ranks 400, 502, 512 and 542 of 550. Restricted to its most confident two thirds of cases it sends nobody home. The comparison that made A12 look safer than the classifier was measuring A12 against a baseline that included exactly the cases A12 declined to decide. The verdicts are independent of tie-breaking: at every truncation boundary a single case sits on the cut. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>A12 is inadmissible, and the §12 dependency dissolves</h4>
+<p><strong>A12 was recorded on 31 August as a recommendation awaiting the §12 clinician review</strong>, on the grounds that demoting the Grad-CAM spatial check from a gate to an advisory flag is a clinical judgement rather than only a technical one. Under the veto it does not reach that question: it sends two referable patients home where the classifier deciding the same number of cases sends none. The clinical judgement never has to be adjudicated, and <code>escalateOnExplanationDisagreement</code> stays <code>true</code> on the evidence rather than on the absence of a reviewer. A11 and A13 fall with it.</p>
+<p style="margin-bottom:0"><strong>A5, the configuration that shipped until 31 August, is also inadmissible.</strong> Its single miss at coverage 0.2745 is worse than the classifier alone deciding the same number of cases, which sends none home. A10 replaced it for reasons unrelated to this criterion and is the only non-trivial configuration in the study that passes. A1 and A2 pass vacuously: at full coverage the veto compares the classifier against itself. <span class="tag v">Verified</span></p>
+</div>
+
+<h4>A14 - deferring on the calibrated probability alone</h4>
+
+<p>Applying the veto raises the question §11.6 had not asked. If the classifier's misses concentrate in its own low-confidence tail, how much of the pipeline's safety is the pipeline, and how much is available from the calibrated probability by itself? <strong>A14</strong> answers it: rank cases by distance from the frozen threshold, hand the least confident to a human, and decide the rest by the threshold. No quality gate, no lesion evidence, no ICDR rule trace, no Grad-CAM, no agreement check.</p>
+
+<p>The cut is selected on the <strong>calibration</strong> split at a zero-miss budget and merely applied to validation, because the largest coverage at which a split happens to carry no misses is a property of that split, and choosing it on the split that then reports it is selection on the evaluation set. Measured by <code>eval/confidenceDeferral.m</code>, which refuses to run if both arguments name the same split. Calibration metrics: <code>results/20260902_013848_full_metrics_calibration</code>.</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Cfg</strong></td><td><strong>Coverage</strong></td><td><strong>Referable sent home</strong></td><td><strong>clear / refer / escalate</strong></td></tr>
+<tr><td>A10 - the pipeline that ships</td><td>0.3273</td><td>0</td><td>139 / 41 / 370</td></tr>
+<tr><td>A12 - the pipeline at its most permissive admissible-or-not</td><td>0.6636</td><td>2</td><td>244 / 121 / 185</td></tr>
+<tr><td><strong>A14 - calibrated probability alone</strong></td><td><strong>0.7527</strong></td><td><strong>1</strong></td><td><strong>219 / 195 / 136</strong></td></tr>
+</tbody>
+</table>
+
+<p>The cut selected on calibration was confidence &ge; 0.332877, covering 0.7671 of that split with nobody sent home. Transferred to validation it covers 0.7527 and sends one patient home, which is the honest cost of the transfer and is reported rather than tuned away. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>A14 covers more of the caseload than any pipeline configuration measured, and this is the finding to state plainly</h4>
+<p><strong>Deferring on the calibrated probability alone covers 75.3% of the caseload while sending one referable patient home. The pipeline that ships covers 32.7% and sends none.</strong> A14 also beats A12 and A13 on both axes at once. It is admissible under the veto, though vacuously: A14 <em>is</em> confidence-ranked truncation of the classifier, which is what ADR 0001 truncates to build its baseline, so it equals its own baseline at every coverage and the veto cannot discriminate on it. The comparison that means something is inverted - at equal misses, which configuration covers more - and on that comparison the pipeline loses.</p>
+<p><strong>The bound is structural, not a matter of tuning.</strong> A gate can only escalate more, never less, so the highest coverage the agreement check can reach with the learned channel is the no-gate case, A12 at 0.6636 with 2 sent home. No setting of the two spatial constants can lift the pipeline past A14 on this split. Recalibrating them is therefore an optimisation within the pipeline and not an answer to this table.</p>
+<p style="margin-bottom:0"><strong>What A14 is not.</strong> It is not a competing deliverable. R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those; A14 could not satisfy the problem statement if it covered everything. It is a <em>baseline that bounds what the deferral machinery adds on this split</em>, and the pipeline has to justify itself on the axes A14 cannot serve rather than on coverage at equal safety, where it currently loses. <span class="tag v">Verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>Two things this split cannot tell us, and one of them is the pipeline's whole claim</h4>
+<p><strong>The validation split contains no ungradable image.</strong> Its quality strata are 511 gradable and 39 borderline. The quality gate therefore never rejects a frame here, so A14's lack of one costs it nothing measurable, and R1.1's contribution to safety is not tested by this comparison in either direction. A14's advantage is to that extent an artefact of a split with no ungradable images in it.</p>
+<p style="margin-bottom:0"><strong>The pipeline's claim is about the failure mode this split cannot produce.</strong> §8.6 exists because a classifier that has learned a non-pathological image property produces a confident prediction and a plausible heatmap, and a confidently wrong prediction ranks <em>high</em> in A14's ordering and is auto-decided with nothing to catch it. That is precisely the case the under-detected check is built to catch and A14 structurally cannot. On in-domain APTOS validation the failure barely occurs, which is why A14 wins here. The claim predicts the ordering reverses under domain shift, and the sealed Messidor-2 set (§10.4) is the only external read available and therefore the experiment that decides it. <strong>That prediction is recorded here, before the unseal, so it cannot be fitted to the result afterwards.</strong> <span class="tag o">Open</span></p>
+</div>
+
+<h3>§11.6 correction - 2 September 2026, what the spatial gate actually catches</h3>
+
+<div class="box warn">
+<h4>The entry above is corrected here, and the correction goes against it</h4>
+<p>The A14 entry concluded that deferring on the calibrated probability alone dominates the pipeline on this split, and explained the pipeline's loss by saying the failure §8.6 exists to catch "barely occurs in domain". <strong>Per-case records now show that it does occur in domain, that it occurs on the most severe grade in the split, and that the Grad-CAM spatial gate is the only mechanism that catches it.</strong> The reasoning above stands as written and its conclusion does not.</p>
+<p style="margin-bottom:0">Produced by <code>eval/ablationHarness.m</code> writing <code>per_case.csv</code>: <code>results/20260902_052342_ablation_A1_A5</code>, 3,300 rows over six configurations. Every configuration reproduces its 30 August coverage and miss count exactly, so this is the same measurement with the patients named rather than a new one. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The classifier sends four referable patients home, and they are now identifiable.</strong></p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Image</strong></td><td><strong>Reference grade</strong></td><td><strong>Calibrated P(referable)</strong></td><td><strong>CNN level</strong></td><td><strong>Spatial statistic</strong></td></tr>
+<tr><td><code>d1a24527a15d</code></td><td><strong>4 - proliferative</strong></td><td><strong>0.0593</strong></td><td>1</td><td><strong>0.0000</strong></td></tr>
+<tr><td><code>caec68f11c86</code></td><td>2</td><td>0.1988</td><td>0</td><td>0.2044</td></tr>
+<tr><td><code>3f47f83217b5</code></td><td>2</td><td>0.2383</td><td>1</td><td>0.0000</td></tr>
+<tr><td><code>5a2c27b95c7c</code></td><td>2</td><td>0.3526</td><td>1</td><td>0.3056</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>A11, A12, A13 and A14 all send a proliferative patient home; A10 does not, and only the gate stops it</h4>
+<p><code>d1a24527a15d</code> is graded 4, the most severe point on the ICDR scale. The classifier calls it Level 1 at a calibrated referable probability of <strong>0.0593</strong>: not an uncertain case it declines to commit on, but a confident and badly wrong one. The rule engine also reads Level 1, so the two channels agree, and the agreement status is <em>concordant</em>. Every check that compares the channels to one another passes it.</p>
+<p><strong>In A10 its four reason codes are <code>explanation-disagreement</code>, two capability gaps and one advisory finding.</strong> Only the first forces escalation. The under-detected check does not fire, because that check runs on a referable prediction and this prediction is Level 1. <code>alwaysEscalateLevel4</code> does not fire, because that reads the predicted level, not the reference grade. The spatial gate is the sole mechanism standing between this patient and an automated all-clear, and it fires at the maximum strength of its signal: <strong>zero</strong> of the candidates reach the attention cut.</p>
+<p style="margin-bottom:0">Demote the gate and the patient goes home. A11, A12 and A13 all auto-clear this case as <em>concordant</em>. <strong>So does A14</strong>: its confidence, <code>|0.0593 - 0.40| = 0.3407</code>, sits above the cut of 0.332877 selected on calibration, so A14 retains the case and clears it. A14's single miss is this patient. <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>The gate fires on every case the classifier gets wrong, and their statistics are an order of magnitude lower.</strong> Over the 548 A10 rows carrying a spatial statistic:</p>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Case group</strong></td><td><strong>n</strong></td><td><strong>Median spatial statistic</strong></td><td><strong>Gate fires</strong></td></tr>
+<tr><td>Classifier correct on the endpoint</td><td>517</td><td>0.2128</td><td>57.1%</td></tr>
+<tr><td>Classifier over-refers</td><td>27</td><td>0.2308</td><td>55.6%</td></tr>
+<tr><td><strong>Classifier sends a referable patient home</strong></td><td><strong>4</strong></td><td><strong>0.0200</strong></td><td><strong>100%</strong></td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>Two signals agree, on four cases, and four cases is what this is worth</h4>
+<p>The gate fires on all four of the classifier's misses against a base rate of 57.1%, which would happen by chance with probability 0.571<sup>4</sup> = <strong>0.106</strong>. That is suggestive and it is not significant. Their median statistic, 0.0200 against 0.2128, is a second signal pointing the same way, and it is not independent enough of the first to multiply through. <strong>On n = 4 the honest claim is a direction, not a demonstration</strong>, and the §12 reader study or the sealed set are what would settle it.</p>
+<p style="margin-bottom:0">What the numbers do settle is narrower and still decisive for the disposition: on this split, removing the gate sends a proliferative patient home, and no other mechanism in the pipeline catches that case. That is enough to keep the gate without needing the discrimination claim to hold. <span class="tag p">Partly verified</span></p>
+</div>
+
+<div class="box warn">
+<h4>What this costs, stated plainly</h4>
+<p>The gate escalates 314 of 550 cases, 57.1% of the caseload, and the four it needed to catch are four. A reader who wants the trade in one sentence: <strong>the pipeline hands 57% of its patients to a human in order to catch four the classifier would have sent home, one of them proliferative.</strong> Whether that is a good exchange is a service-capacity question, and §9.5 now prices it: at the shipped deferral rate the district needs 591.82 grader-hours a year against 214.65 at the scenario rate.</p>
+<p style="margin-bottom:0">This also revises what §8.3 implies about the gate. §8.3 is right that a 14x14 map cannot localise a microaneurysm, and the earlier reading took that to mean a test built on it asks for precision the channel does not have. The measurement says the coarse signal is nonetheless lowest exactly where the classifier is wrong. A channel too coarse to say <em>where</em> a lesion is can still say that attention and evidence are not in the same place at all, and that is what this gate reads. <span class="tag v">Verified</span></p>
 </div>
 
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
@@ -1861,7 +2092,7 @@ A = gpuArray.rand(4096); tic; B = A*A; wait(d); toc"</code></pre>
 <p>APTOS and IDRiD are Indian, which is favourable for our deployment target, but neither was collected under the field conditions the PS describes &mdash; handheld cameras, uncontrolled lighting, untrained operators. Our quality gate is designed for those conditions but is validated on data that largely does not contain them. Closing this gap requires field data we do not have.</p>
 
 <h2>17.8 Simulation is not deployment</h2>
-<p>The SimEvents model uses parameters partly measured from our own pipeline (rejection rate, inference latency, grader time) and partly assumed (arrival patterns, bandwidth, connectivity). It is a capacity-planning tool whose conclusions are conditional on those assumptions. State the assumptions alongside every result it produces.</p>
+<p>The SimEvents model's parameters are not uniformly measured, and which are which decides what its conclusions can carry. <strong>Measured from our own pipeline:</strong> inference latency, 0.715 s median per case (§11.3), and model sensitivity and specificity at the operating point frozen on 23 August (§11.2). <strong>Placeholders, not measurements, despite an earlier version of this paragraph naming both as measured:</strong> grader service time, which is the 30-second R4.5 target standing in until the §12 reader study reports a distribution, and the 21% quality rejection rate, which is the deployed-system field result quoted in §5.1 as external context and was never measured on our data. <strong>Scenario assumptions:</strong> arrival pattern and camp-day multiplier, capture time, image size, bandwidth, connectivity availability, PHC count, referable prevalence, and the turnaround target. The deferral rate is measured &mdash; 0.6727, §11.6 configuration A10 &mdash; but the configured 0.10 is deliberately a scenario value, so any sweep quoted at 0.10 describes a better system than the one that ships and must say so. It is a capacity-planning tool whose conclusions are conditional on all of the above. State the assumptions alongside every result it produces, as §9.5 and <code>docs/simulation_assumptions.md</code> do. <span class="tag v">Verified</span></p>
 
 <h1>18. References</h1>
 

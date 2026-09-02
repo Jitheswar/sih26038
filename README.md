@@ -116,6 +116,68 @@ Its second repair demotes the Grad-CAM spatial check from a gate to an advisory 
 
 The operating point frozen on 23 August is untouched: the threshold of 0.40, the temperature and the checkpoint are unchanged, and no metric behind them was re-selected.
 
+Configurations are now compared against the classifier at equal coverage, and that changes which of them are admissible.
+
+The A10-A13 table above compares configurations that decide different fractions of the caseload on raw miss counts.
+A deferral pipeline sheds exactly the low-confidence cases where a classifier's errors concentrate, so its count over a self-selected subset is not comparable to the classifier's count over everything.
+`docs/adr/0001-equal-coverage-safety-veto.md` states the criterion: a configuration is inadmissible if it sends more referable patients home than the classifier alone does at the same coverage.
+It counts false negatives only, reads the point estimate because these intervals overlap heavily, and is a veto rather than a ranking.
+
+| Cfg | Coverage | Sends home | Classifier at same coverage | Admissible |
+| --- | --- | --- | --- | --- |
+| A5 - classical, shipped until 31 Aug | 0.2745 | 1 | 0 | No |
+| **A10 - learned, endpoint levels, shipped** | **0.3273** | **0** | **0** | **Yes** |
+| A11 - learned, spatial advisory | 0.2436 | 2 | 0 | No |
+| A12 - learned, both repairs | 0.6636 | 2 | 0 | No |
+| A13 - classical, both repairs | 0.7382 | 4 | 1 | No |
+
+The classifier's four misses all sit deep in its own low-confidence tail, at confidence ranks 400, 502, 512 and 542 of 550, so restricted to its most confident two thirds of cases it sends nobody home.
+The comparison that made A12 look safer than the classifier was measuring it against a baseline that included exactly the cases A12 declined to decide.
+
+A12 is therefore inadmissible and the clinical judgement it was parked on never has to be adjudicated.
+`escalateOnExplanationDisagreement` stays `true` on the evidence rather than on the absence of a reviewer, and the §12 reader study is recorded as descoped rather than pending.
+See `docs/adr/0002-keep-the-grad-cam-spatial-gate.md`.
+A5, which shipped until 31 August, is also inadmissible; A10 is the only non-trivial configuration in the study that passes.
+
+Deferring on the calibrated probability alone beats the pipeline on this split, and that is stated here rather than left for a judge to find.
+
+Configuration A14 ranks cases by distance from the frozen threshold and hands the least confident to a human, with no quality gate, no lesion evidence, no ICDR rule trace, no Grad-CAM and no agreement check.
+Its cut is selected on the calibration split at a zero-miss budget and applied to validation, never selected on the split that reports it.
+
+| Cfg | Coverage | Referable sent home |
+| --- | --- | --- |
+| A10 - the pipeline that ships | 0.3273 | 0 |
+| **A14 - calibrated probability alone** | **0.7527** | **1** |
+
+The bound is structural rather than a matter of tuning: a gate can only escalate more, so the most permissive the agreement check can be is the no-gate case, A12 at 0.6636 with two sent home, and no setting of the spatial constants lifts the pipeline past A14 on this split.
+
+That reading was corrected the same day, and the correction goes against it.
+
+Per-case records now name the patients each configuration sends home (`results/20260902_052342_ablation_A1_A5/per_case.csv`, 3,300 rows, every configuration reproducing its 30 August numbers exactly).
+The classifier's four misses are three graded 2 and one graded **4, proliferative**.
+
+That patient, `d1a24527a15d`, is called Level 1 by the classifier at a calibrated referable probability of 0.0593: confident, and badly wrong.
+The rule engine also reads Level 1, so the channels agree and the agreement status is concordant.
+The under-detected check does not fire, because it runs on a referable prediction and this prediction is Level 1.
+`alwaysEscalateLevel4` does not fire, because it reads the predicted level and not the reference grade.
+**The Grad-CAM spatial gate is the only mechanism that escalates this patient**, and it fires at full strength: zero of the candidates reach the attention cut.
+
+Demote the gate and the patient goes home. A11, A12 and A13 all auto-clear the case as concordant.
+So does A14, whose confidence of `|0.0593 - 0.40| = 0.3407` sits above its calibration-selected cut of 0.332877.
+**A14's single miss is the proliferative patient**, so its coverage advantage is bought with the worst case in the split.
+
+Across the 548 A10 rows carrying a spatial statistic, the gate fires on 57.1% of cases the classifier gets right, 55.6% of those it over-refers, and 100% of the four it sends home, whose median statistic is 0.0200 against 0.2128.
+Four of four at a 57.1% base rate would happen by chance with probability 0.106, so this is a direction and not a demonstration.
+What it does settle is narrower and enough for the disposition: on this split, removing the gate sends a proliferative patient home and nothing else in the pipeline catches it.
+
+The cost is stated plainly rather than argued away: the gate escalates 314 of 550 cases to catch four.
+§9.5 prices that at 591.82 grader-hours a year against 214.65 at the scenario deferral rate.
+
+The earlier claim that this failure "barely occurs in domain" was wrong, and the prediction built on it - that the ordering only reverses under domain shift - is withdrawn.
+It reverses in domain, on this split.
+A14 remains not a competing deliverable: R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those.
+One limit of the split still stands: it contains no ungradable image, so the quality gate never fires and A14's lack of one costs it nothing measurable here.
+
 Vessel segmentation (§6.3, R2.2) is trained.
 A patch-based U-Net on the CLAHE-equalised green channel, trained on DRIVE at 128x128 crops, selected on validation AUC at epoch 8 of 16 before early stopping.
 
@@ -140,6 +202,29 @@ These numbers are therefore a held-out result and **not** the DRIVE benchmark, a
 Nothing downstream consumes the vessel network yet.
 §6.3 names three uses - venous beading for the 4-2-1 rule, vessel masking to suppress false haemorrhage detections, and neovascularisation features - and none are wired into the screening pipeline.
 Claiming the downstream benefit before it is measured is exactly what §11.1 exists to prevent.
+
+The SimEvents district capacity model (§9, R5.1 and R5.2) has been run end to end.
+All six optimisation experiments E1 to E6 come from one seeded invocation of `simulink/sweep_experiments.m` on 1 September 2026, each writing a dated results directory with the configuration it used.
+Every sweep point is a 14-day window held at the full annual arrival rate for 100,000 screenings a year, and every annual figure here is that window multiplied by 365/14 = 26.07 rather than a simulated year.
+The six reproduce the 23 August run of the same model to eight significant figures.
+
+At 100,000 screenings a year the district's human-review workload is 214.65 grader-hours, and the minimum grader count that meets the 24-hour turnaround target is one, at 2.45 per cent utilisation, unchanged at 50,000 and at 150,000 screenings a year.
+Read the headcount as a statement about the placeholder rather than about a district.
+Grader service time is the 30-second R4.5 target standing in until the §12 reader study reports a distribution, and the model's grader pool is available around the clock.
+Five minutes a case on an eight-hour day would multiply that utilisation by thirty; the workload figure scales with the service time and the headcount does not survive changing it.
+
+That 214.65 is also at the configured deferral rate of 0.10, which is a scenario value no measured configuration reaches.
+E3 therefore sweeps the rate the shipped pipeline actually defers at, 0.6727 from ablation A10, reading it from the configuration so the experiment cannot go stale behind the pipeline.
+At that rate the workload is 591.82 grader-hours a year, 2.76 times the scenario figure, and that is the number that describes what ships today.
+
+Connectivity availability, not bandwidth, is the binding infrastructure constraint.
+A twentyfold bandwidth increase moves mean turnaround by 3.1 per cent at 30 per cent connectivity availability, while raising availability from 30 to 90 per cent cuts it by about 97.5 per cent.
+At 8 MB a case the transfer takes seconds and the wait for the next connectivity window takes hours, which is the quantified case for keeping inference local rather than shipping every image out for it.
+Camp-day bunching quadruples the peak queue, 29 to 117, while moving mean turnaround by 11.8 per cent and p95 turnaround not at all, so the cost of a camp day is patients waiting on site rather than reports arriving late.
+
+Two experiments returned less than §9.5 expected of them, and both are recorded as such rather than reported as wins.
+E2 sweeps sensitivity with specificity held fixed, so it prices the extra true positives and not the extra false positives, and the sensitivity-against-grader-hours Pareto curve §9.5 calls for is not yet the curve §9.5 specifies.
+E5 shows the quality gate lowering grader load rather than raising it, because an image that exhausts its recaptures is routed to human review while the model samples the AI decision from a fixed sensitivity and specificity irrespective of image quality, so this model has no way to price what the gate is actually for.
 
 ## Demo pack
 
@@ -222,6 +307,12 @@ Run the full test suite:
 matlab -batch "assertSuccess(runtests('tests','IncludeSubfolders',true))"
 ```
 
+Run the district capacity experiments E1 to E6:
+
+```bash
+matlab -batch "addpath('simulink'); sweep_experiments()"
+```
+
 Launch the demo UI:
 
 ```bash
@@ -251,7 +342,8 @@ Image Processing, Computer Vision, Deep Learning, Medical Imaging, Statistics an
 - **Vessel metrics are scored inside the field-of-view mask only.** A DRIVE frame is 31 per cent black corner outside the camera aperture and every one of those pixels is a true negative, so whole-frame scoring hands the result a third of a frame of free specificity.
 - **Bare accuracy is never reported.** Sensitivity and specificity are reported at the frozen operating point with 95% Wilson intervals and stated n; softmax output is not confidence, so temperature-scaled probabilities are reported with ECE and a reliability diagram.
 
-Full detail and rationale for every rule above is in `docs/SIH26038_design.html`; `AGENTS.md` has the equivalent guidance for agents working in this repository.
+Full detail and rationale for every rule above is in `docs/SIH26038_design.html`.
+`CONTEXT.md` is the glossary, `docs/adr/` holds the decisions that were hard to reverse, and `CLAUDE.md` points agents at both.
 
 ## License
 

@@ -159,6 +159,8 @@
     "alwaysEscalateLevel4": true,
     "escalateOnUnknownEvidence": true,
     "escalateOnExplanationDisagreement": true,
+    "spatialAttentionCut": 0.35,
+    "spatialAgreementFraction": 0.25,
     "escalateOnCapabilityGap": false,
     "levelComparison": "endpoint"
   }

@@ -109,7 +109,8 @@ explanationInput = struct( ...
         'evidenceKnown', ~icdrRuleResult.caseUnknownEvidence, ...
         'referable', icdrRuleResult.referable), ...
     'gradCamAndLesionEvidenceSpatiallyAgree', ...
-        localSpatialAgreement(gradCAMResult, evidenceDetection), ...
+        localSpatialAgreement(gradCAMResult, evidenceDetection, ...
+        localSpatialConstants(config)), ...
     'lesionEvidenceSupportsCNN', ...
         localEvidenceSupportsCNN(predictedLevel, evidenceDetection, ...
         icdrRuleResult));
@@ -477,32 +478,27 @@ else
 end
 end
 
-function answer = localSpatialAgreement(gradCAMResult, detection)
-%LOCALSPATIALAGREEMENT Do the candidates sit where the model is looking?
-%   The 0.35 cut is a fraction of peak attention, so it must be applied to
-%   the normalized map.  resizedHeatmap is the unnormalized Grad-CAM
-%   response, whose scale is arbitrary and in practice tiny: peaks of 1e-4
-%   to 0.28 are typical, so a 0.35 cut on it never fired and every case
-%   raised explanation-disagreement.
-answer = false;
-if ~isfield(gradCAMResult, 'normalizedHeatmap') || ...
-        isempty(gradCAMResult.normalizedHeatmap)
-    return;
+function constants = localSpatialConstants(projectConfig)
+%LOCALSPATIALCONSTANTS The §8.6 spatial test's two constants, from config.
+%   Read through localDecisionConfig so a configuration that omits the
+%   decision policy gets the same frozen fallback the policy itself gets,
+%   rather than a second set of defaults living here.
+policy = localDecisionConfig(projectConfig).decision_policy;
+constants = struct();
+for name = ["spatialAttentionCut", "spatial_attention_cut", ...
+        "spatialAgreementFraction", "spatial_agreement_fraction"]
+    if isfield(policy, name)
+        constants.(name) = policy.(name);
+    end
 end
-if detection.candidateCount == 0
-    answer = true;
-    return;
 end
-heatmap = double(gradCAMResult.normalizedHeatmap);
-coordinates = detection.candidateCoordinates;
-valid = coordinates(:, 1) >= 1 & coordinates(:, 1) <= size(heatmap, 2) & ...
-    coordinates(:, 2) >= 1 & coordinates(:, 2) <= size(heatmap, 1);
-coordinates = round(coordinates(valid, :));
-if isempty(coordinates)
-    return;
-end
-linear = sub2ind(size(heatmap), coordinates(:, 2), coordinates(:, 1));
-answer = mean(heatmap(linear) >= 0.35) >= 0.25;
+
+function [answer, evidence] = localSpatialAgreement(gradCAMResult, detection, configuration)
+%LOCALSPATIALAGREEMENT Delegate to the shared §8.6 spatial test.
+%   Shared with eval/ablationHarness.m through grade.spatialAgreement so
+%   the ablation cannot drift from the deployed pipeline.
+[answer, evidence] = grade.spatialAgreement(gradCAMResult, detection, ...
+    configuration);
 end
 
 function answer = localEvidenceSupportsCNN(predictedLevel, detection, rule)

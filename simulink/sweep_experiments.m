@@ -184,7 +184,18 @@ end
 % E3: deferral threshold sweep.
 % ------------------------------------------------------------------
 function out = runE3DeferralThreshold(configPath, baseConfig, windowDays)
-deferralRates = [0.02, 0.05, 0.10, 0.15, 0.20, 0.30];
+% The scenario grid stops at 0.30 and the pipeline that ships defers well
+% past it, so sweeping the grid alone would report the human-review cost of
+% a system nobody runs. The measured rate is appended as its own sweep
+% point and is read from measuredDeferralRate in the configuration rather
+% than typed here, so it follows the shipped pipeline instead of going
+% stale behind it (see docs/simulation_assumptions.md).
+scenarioRates = [0.02, 0.05, 0.10, 0.15, 0.20, 0.30];
+measuredRate = [];
+if isfield(baseConfig, 'measuredDeferralRate')
+    measuredRate = baseConfig.measuredDeferralRate;
+end
+deferralRates = unique([scenarioRates, measuredRate]);
 generousGraders = 12;
 rows = table();
 for i = 1:numel(deferralRates)
@@ -195,6 +206,8 @@ for i = 1:numel(deferralRates)
         'DeferralRate', deferralRate);
     row = localSummaryRow(result);
     row.deferralRate = deferralRate;
+    row.isMeasuredPipelineRate = ~isempty(measuredRate) && ...
+        deferralRate == measuredRate;
     row.autonomousCoveragePercent = 100 * result.totalAutoCleared / ...
         max(1, result.totalEntitiesGenerated);
     row.humanReviewVolume = result.totalReferred + result.totalEscalated;
@@ -206,7 +219,16 @@ resultsDir = localNewExperimentDirectory('E3_deferral_threshold');
 writetable(rows, fullfile(resultsDir, 'deferral_sweep.csv'));
 
 fig = figure('Visible', 'off');
-plot(rows.deferralRate, rows.autonomousCoveragePercent, '-o');
+plot(rows.deferralRate, rows.autonomousCoveragePercent, '-o', ...
+    'DisplayName', 'scenario sweep');
+if any(rows.isMeasuredPipelineRate)
+    hold on;
+    measuredRow = rows(rows.isMeasuredPipelineRate, :);
+    plot(measuredRow.deferralRate, measuredRow.autonomousCoveragePercent, ...
+        'r*', 'MarkerSize', 12, 'DisplayName', ...
+        sprintf('measured pipeline rate %.4f', measuredRow.deferralRate));
+    legend('Location', 'best');
+end
 xlabel('Deferral rate');
 ylabel('Autonomous coverage (%)');
 title('E3: deferral rate versus autonomous coverage');
@@ -214,7 +236,8 @@ exportgraphics(fig, fullfile(resultsDir, 'deferral_versus_coverage.png'));
 close(fig);
 
 localWriteExperimentConfig(resultsDir, baseConfig, ...
-    struct('deferralRates', deferralRates, 'numberOfGraders', generousGraders, ...
+    struct('deferralRates', deferralRates, 'scenarioRates', scenarioRates, ...
+    'measuredPipelineRate', measuredRate, 'numberOfGraders', generousGraders, ...
     'windowDays', windowDays));
 out = struct('table', rows, 'resultsDirectory', resultsDir);
 end

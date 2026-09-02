@@ -205,5 +205,51 @@ classdef TestAblationHarness < matlab.unittest.TestCase
                 rmdir(directory, 's');
             end
         end
+
+        function perCaseRowsReconcileWithTheAggregates(testCase)
+            % The safety column counts referable patients sent home, and
+            % until now nothing recorded which ones they were. These rows
+            % are only worth having if they add up to the same numbers the
+            % table reports, so the reconciliation is the test.
+            result = ablationHarness('Configs', {'ablation_A10.json'}, ...
+                'Limit', 4, 'ResultsRoot', tempname());
+            perCase = readtable(fullfile(result.resultsDirectory, ...
+                'per_case.csv'), 'TextType', 'string');
+            testCase.assertNotEmpty(perCase);
+
+            metrics = result.perConfig(1);
+            rows = perCase(perCase.config == "A10", :);
+            testCase.verifyEqual(height(rows), metrics.n, ...
+                'One row per evaluated case.');
+            testCase.verifyEqual(sum(rows.autonomous), ...
+                metrics.autonomousCount, 'Autonomous count must agree.');
+            testCase.verifyEqual(sum(rows.missed_referable), ...
+                metrics.missedReferable, ...
+                'The safety column must be the sum of its own rows.');
+            testCase.verifyEqual(sum(rows.decision == "auto-clear"), ...
+                metrics.decisionCounts.autoClear);
+            testCase.verifyEqual(sum(rows.decision == "refer"), ...
+                metrics.decisionCounts.refer);
+            testCase.verifyEqual(sum(rows.decision == "escalate"), ...
+                metrics.decisionCounts.escalate);
+        end
+
+        function everyMissedReferableIsNamed(testCase)
+            % The point of the rows: a patient the pipeline sent home can
+            % be identified, graded and looked at. A count cannot be.
+            result = ablationHarness('Configs', {'ablation_A10.json'}, ...
+                'Limit', 4, 'ResultsRoot', tempname());
+            perCase = readtable(fullfile(result.resultsDirectory, ...
+                'per_case.csv'), 'TextType', 'string');
+            missed = perCase(perCase.missed_referable == 1, :);
+            for index = 1:height(missed)
+                testCase.verifyNotEqual(missed.image_id(index), "", ...
+                    'A missed patient must carry an image id.');
+                testCase.verifyGreaterThanOrEqual(missed.truth_grade(index), 2, ...
+                    'A missed referable case must be graded referable.');
+                testCase.verifyTrue(missed.autonomous(index), ...
+                    'A patient the pipeline escalated was not sent home.');
+            end
+        end
     end
 end

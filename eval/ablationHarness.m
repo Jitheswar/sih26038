@@ -312,6 +312,12 @@ features.ruleCaseUnknown = true(n, 1);
 features.ruleResults = cell(n, 1);
 features.qualityResults = cell(n, 1);
 features.spatiallyAgree = false(n, 1);
+% The evidence half of the §8.6 spatial test does not depend on the two
+% constants, so it is cached once per image and the verdict is taken per
+% configuration at composition time.  That is what lets a sweep over
+% (cut, fraction) run offline instead of re-running Grad-CAM per pair.
+features.spatialEvidence = cell(n, 1);
+features.learnedSpatialEvidence = cell(n, 1);
 features.gradCamAvailable = false(n, 1);
 features.evidenceSupportsCNN = false(n, 1);
 % Track B runs alongside Track A in the same pass rather than in a pass of
@@ -410,11 +416,15 @@ for index = 1:n
             gradCAMResult = explain.gradcam(checkpoint, image, ...
                 features.predictedLevel(index), 'WriteArtifacts', false);
             features.gradCamAvailable(index) = true;
-            features.spatiallyAgree(index) = localSpatialAgreement( ...
-                gradCAMResult, detection);
+            features.spatialEvidence{index} = ...
+                grade.spatialEvidence(gradCAMResult, detection);
+            features.spatiallyAgree(index) = ...
+                grade.spatialVerdict(features.spatialEvidence{index});
             if needLearned
+                features.learnedSpatialEvidence{index} = ...
+                    grade.spatialEvidence(gradCAMResult, learnedDetection);
                 features.learnedSpatiallyAgree(index) = ...
-                    localSpatialAgreement(gradCAMResult, learnedDetection);
+                    grade.spatialVerdict(features.learnedSpatialEvidence{index});
             end
         end
     catch exception
@@ -454,6 +464,7 @@ if entry.learnedLesionEvidence
     features.ruleCaseUnknown = features.learnedRuleCaseUnknown;
     features.ruleResults = features.learnedRuleResults;
     features.spatiallyAgree = features.learnedSpatiallyAgree;
+features.spatialEvidence = features.learnedSpatialEvidence;
     features.evidenceSupportsCNN = features.learnedEvidenceSupportsCNN;
 end
 n = split.n;
@@ -478,6 +489,12 @@ decisions.evidenceSupportsCNN = false(n, 1);
 decisions.candidateCount = nan(n, 1);
 decisions.ruleCaseUnknown = false(n, 1);
 decisions.referableProbability = nan(n, 1);
+% The continuous quantity behind the §8.6 spatial verdict, recorded so the
+% boolean can be read against the cut it was taken at.  A patient the gate
+% caught just short of the cut and one it caught far short are different
+% findings, and the boolean cannot tell them apart.
+decisions.spatialStatistic = nan(n, 1);
+decisions.findingKinds = strings(n, 1);
 % The policy's own gates, not the frozen operating point.  frozen.threshold
 % is 0.40 and selects the reported sensitivity/specificity; the policy
 % refers at referableThreshold and clears below autoClearThreshold, and a
@@ -568,6 +585,14 @@ for index = 1:n
     decisions.candidateCount(index) = features.candidateCount(index);
     decisions.ruleCaseUnknown(index) = features.ruleCaseUnknown(index);
     decisions.referableProbability(index) = features.referableProbability(index);
+    decisions.findingKinds(index) = ...
+        string(strjoin(policyResult.findingKinds, ','));
+    evidence = features.spatialEvidence{index};
+    if ~isempty(evidence)
+        [~, clearedFraction] = grade.spatialVerdict(evidence, ...
+            localSpatialConstants(entry));
+        decisions.spatialStatistic(index) = clearedFraction;
+    end
 end
 end
 
@@ -665,11 +690,41 @@ if entry.agreementCheck
             'candidateEvidence', true, ...
             'evidenceKnown', ~features.ruleCaseUnknown(index), ...
             'referable', features.ruleReferable(index)), ...
-        'gradCamAndLesionEvidenceSpatiallyAgree', features.spatiallyAgree(index), ...
+        'gradCamAndLesionEvidenceSpatiallyAgree', ...
+            localSpatialVerdict(features, entry, index), ...
         'lesionEvidenceSupportsCNN', features.evidenceSupportsCNN(index));
 else
     input.explanation = struct();
 end
+end
+
+function rows = localPerCase(entry, decisions, split, evaluated, ...
+    truthReferable, autonomous, predictedReferable)
+%LOCALPERCASE One row per image for one configuration.
+%   truthReferable, autonomous and predictedReferable are already indexed
+%   by evaluated, so the rest is indexed the same way rather than
+%   recomputed, which keeps the rows reconciling with the aggregates by
+%   construction instead of by coincidence.
+missed = truthReferable & ~predictedReferable & autonomous;
+rows = table();
+rows.config = repmat(string(entry.id), sum(evaluated), 1);
+rows.image_id = split.imageIds(evaluated);
+rows.truth_grade = split.grades(evaluated);
+rows.truth_referable = truthReferable;
+rows.decision = decisions.decision(evaluated);
+rows.autonomous = autonomous;
+rows.missed_referable = missed;
+rows.calibrated_probability = decisions.referableProbability(evaluated);
+rows.cnn_level = decisions.predictedLevel(evaluated);
+rows.rule_level = decisions.ruleLevel(evaluated);
+rows.agreement_status = decisions.agreementStatus(evaluated);
+rows.agreement_basis = decisions.agreementBasis(evaluated);
+rows.spatially_agree = decisions.spatiallyAgree(evaluated);
+rows.spatial_statistic = decisions.spatialStatistic(evaluated);
+rows.evidence_supports_cnn = decisions.evidenceSupportsCNN(evaluated);
+rows.candidate_count = decisions.candidateCount(evaluated);
+rows.reason_codes = decisions.reason(evaluated);
+rows.finding_kinds = decisions.findingKinds(evaluated);
 end
 
 % -------------------------------------------------------------------- metrics
@@ -712,6 +767,14 @@ metrics.autonomousSubset = autoMetrics;
 metrics.autonomousAccuracy = autonomousAccuracy;
 metrics.missedReferable = sum(truthReferable & ~predictedReferable & autonomous);
 metrics.threshold = frozen.threshold;
+% Every column this function aggregates, kept per case.  The safety column
+% counts referable patients sent home and nothing recorded which ones they
+% were, so the one number a disposition turns on was the one number that
+% could not be inspected.  agreementLevelMismatch.m did this for
+% escalations; nothing did it for misses, and that is why the escalation
+% column got explained and the safety column did not.
+metrics.perCase = localPerCase(entry, decisions, split, evaluated, ...
+    truthReferable, autonomous, predictedReferable);
 metrics.decisionCounts = struct( ...
     'autoClear', sum(strcmp(decisions.decision, "auto-clear")), ...
     'refer', sum(strcmp(decisions.decision, "refer")), ...
@@ -769,6 +832,25 @@ fprintf(['\nSens and spec are over all cases at the frozen threshold. ' ...
     'coverage.\n']);
 end
 
+function localWritePerCase(resultsDirectory, perConfig)
+%LOCALWRITEPERCASE The rows behind every column the ablation table reports.
+%   Written by the harness rather than by a separate diagnostic, because
+%   the harness is where the numbers are produced and a column whose rows
+%   live somewhere else is a column nobody checks.
+rows = table();
+for index = 1:numel(perConfig)
+    if ~isfield(perConfig(index), 'perCase') || isempty(perConfig(index).perCase)
+        continue;
+    end
+    rows = [rows; perConfig(index).perCase]; %#ok<AGROW>
+end
+if isempty(rows)
+    return;
+end
+writetable(rows, fullfile(resultsDirectory, 'per_case.csv'), ...
+    'QuoteStrings', 'all');
+end
+
 function localWriteOutputs(resultsDirectory, perConfig, configs, split, frozen, options)
 summary = struct();
 summary.split = char(split.name);
@@ -805,6 +887,7 @@ for index = 1:numel(perConfig)
 end
 
 localWriteText(fullfile(resultsDirectory, 'ablation_table.csv'), strjoin(lines, newline));
+localWritePerCase(resultsDirectory, perConfig);
 localWriteText(fullfile(resultsDirectory, 'ablation_summary.json'), ...
     jsonencode(summary, 'PrettyPrint', true));
 save(fullfile(resultsDirectory, 'ablation_results.mat'), 'perConfig', '-v7.3');
@@ -923,26 +1006,15 @@ end
 evidence = grade.icdrEvidenceFromDetection(detection);
 end
 
-function answer = localSpatialAgreement(gradCAMResult, detection)
-answer = false;
-if isempty(detection) || ~isfield(gradCAMResult, 'normalizedHeatmap') || ...
-        isempty(gradCAMResult.normalizedHeatmap)
-    return;
+function [answer, evidence] = localSpatialAgreement(gradCAMResult, detection, configuration)
+%LOCALSPATIALAGREEMENT Delegate to the shared §8.6 spatial test.
+%   Shared with app.runScreeningCase through grade.spatialAgreement so the
+%   harness cannot drift from the deployed pipeline.
+if nargin < 3
+    configuration = struct();
 end
-if detection.candidateCount == 0
-    answer = true;
-    return;
-end
-heatmap = double(gradCAMResult.normalizedHeatmap);
-coordinates = detection.candidateCoordinates;
-valid = coordinates(:, 1) >= 1 & coordinates(:, 1) <= size(heatmap, 2) & ...
-    coordinates(:, 2) >= 1 & coordinates(:, 2) <= size(heatmap, 1);
-coordinates = round(coordinates(valid, :));
-if isempty(coordinates)
-    return;
-end
-linear = sub2ind(size(heatmap), coordinates(:, 2), coordinates(:, 1));
-answer = mean(heatmap(linear) >= 0.35) >= 0.25;
+[answer, evidence] = grade.spatialAgreement(gradCAMResult, detection, ...
+    configuration);
 end
 
 function answer = localEvidenceSupportsCNN(predictedLevel, detection, rule)
@@ -1015,4 +1087,38 @@ end
 
 function root = localProjectRoot()
 root = fileparts(fileparts(mfilename('fullpath')));
+end
+
+function answer = localSpatialVerdict(features, entry, index)
+%LOCALSPATIALVERDICT Take the §8.6 spatial test for one configuration.
+%   The cached evidence is config-free, so the verdict is taken here with
+%   this entry's two constants rather than at feature time.  A
+%   configuration that does not name them gets the shipped defaults, which
+%   is what every configuration got before they were nameable at all.
+evidence = features.spatialEvidence{index};
+if isempty(evidence)
+    answer = features.spatiallyAgree(index);
+    return;
+end
+answer = grade.spatialVerdict(evidence, localSpatialConstants(entry));
+end
+
+function constants = localSpatialConstants(entry)
+%LOCALSPATIALCONSTANTS The two §8.6 spatial constants from an ablation entry.
+constants = struct();
+if ~isfield(entry, 'config') || ~isstruct(entry.config)
+    return;
+end
+policy = struct();
+if isfield(entry.config, 'decision_policy')
+    policy = entry.config.decision_policy;
+elseif isfield(entry.config, 'decisionPolicy')
+    policy = entry.config.decisionPolicy;
+end
+for name = ["spatialAttentionCut", "spatial_attention_cut", ...
+        "spatialAgreementFraction", "spatial_agreement_fraction"]
+    if isfield(policy, name)
+        constants.(name) = policy.(name);
+    end
+end
 end
