@@ -58,8 +58,12 @@ end
 checkpoint = load(checkpointPath, 'net', 'config');
 checkpoint.checkpointPath = checkpointPath;
 
-split = localReadSplit(projectRoot, options.split, options.limit);
-fprintf('Ablation study on the %s split: %d images.\n', options.split, split.n);
+if isstruct(options.split)
+    split = localAcceptPreparedSplit(options.split);
+else
+    split = localReadSplit(projectRoot, options.split, options.limit);
+end
+fprintf('Ablation study on the %s split: %d images.\n', split.name, split.n);
 fprintf('Frozen operating point: threshold %.3f on calibrated P(ICDR>=2), temperature %.4f.\n', ...
     frozen.threshold, frozen.temperature);
 fprintf('Frozen checkpoint: %s\n\n', frozen.model);
@@ -90,7 +94,9 @@ localPrintTable(rows);
 
 result = struct();
 result.status = "completed";
-result.split = string(options.split);
+% split.name, not options.split: the latter is a prepared struct when the
+% caller supplied the images rather than naming a committed split.
+result.split = string(split.name);
 result.n = split.n;
 result.frozen = frozen;
 result.configs = configs;
@@ -112,10 +118,21 @@ parser.parse(varargin{:});
 
 options = struct();
 options.configs = cellstr(string(parser.Results.Configs));
-options.split = char(string(parser.Results.Split));
+% Split is either the name of a committed split, or a prepared split struct
+% supplied by a caller that holds images this function cannot reach by
+% name.  eval/externalValidation.m is the only such caller: the sealed set
+% is not a committed split and must not become one.
+if isstruct(parser.Results.Split)
+    options.split = parser.Results.Split;
+else
+    options.split = char(string(parser.Results.Split));
+end
 options.limit = parser.Results.Limit;
 options.resultsRoot = char(string(parser.Results.ResultsRoot));
 
+if isstruct(options.split)
+    return;
+end
 if strcmpi(options.split, 'test')
     error('eval:TestSplitRefused', ...
         ['The test split is touched once (§11.1) and has already been ' ...
@@ -147,6 +164,41 @@ frozen = struct( ...
     'temperature', double(point.temperature), ...
     'model', char(point.model), ...
     'frozenOn', char(point.frozen_on));
+end
+
+function split = localAcceptPreparedSplit(split)
+%LOCALACCEPTPREPAREDSPLIT Take a split a caller assembled, under conditions.
+%   The name-based path refuses the test split and refuses anything under
+%   data/sealed, and a prepared struct must not become the way round those
+%   guards.  So a prepared split that carries sealed paths has to say so
+%   and has to declare that its caller already passed the §10.4 unseal
+%   check; nothing else may hand one in.
+required = {'n', 'imageIds', 'grades', 'files', 'name', 'provenance'};
+for index = 1:numel(required)
+    if ~isfield(split, required{index})
+        error('eval:InvalidPreparedSplit', ...
+            'A prepared split must carry %s.', required{index});
+    end
+end
+if numel(split.imageIds) ~= split.n || numel(split.grades) ~= split.n || ...
+        numel(split.files) ~= split.n
+    error('eval:InvalidPreparedSplit', ...
+        'A prepared split must carry n image ids, grades and files.');
+end
+touchesSealed = any(contains(lower(string(split.files)), "sealed"));
+authorised = isfield(split, 'sealedAccessAuthorised') && ...
+    islogical(split.sealedAccessAuthorised) && split.sealedAccessAuthorised;
+if touchesSealed && ~authorised
+    error('eval:SealedData', ...
+        ['A prepared split referencing data/sealed must set ' ...
+        'sealedAccessAuthorised, which only the §10.4 unseal protocol ' ...
+        'may do after its own confirmation.']);
+end
+if touchesSealed
+    fprintf(['Prepared split touches data/sealed under an authorised ' ...
+        'unseal.\n  Provenance: %s\n'], char(split.provenance));
+end
+split.name = string(split.name);
 end
 
 function split = localReadSplit(projectRoot, splitName, limit)
