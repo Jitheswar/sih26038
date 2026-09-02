@@ -151,6 +151,15 @@
     "validation_sensitivity": 0.9821,
     "validation_specificity": 0.9174
   },
+  "deferral_baseline": {
+    "confidence_cut": 0.332877,
+    "selected_on": "calibration",
+    "selected_n": 365,
+    "miss_budget": 0,
+    "frozen_on": "2026-09-02",
+    "selection_results": "results/20260902_013848_full_metrics_calibration",
+    "note": "Configuration A14 of \u00a711.6: defer on abs(calibrated P(referable) - autoClearThreshold) alone, with none of the pipeline's channels. The cut is the largest coverage the calibration split allows at a zero-miss budget, selected there and never on a reporting split. Frozen before the sealed set is opened so the external comparison uses a pre-committed number rather than one chosen after seeing the answer."
+  },
   "decision_policy": {
     "referableThreshold": 0.7,
     "autoClearThreshold": 0.4,
