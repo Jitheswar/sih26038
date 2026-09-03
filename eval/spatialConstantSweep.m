@@ -5,8 +5,16 @@ function result = spatialConstantSweep(runDirectory, varargin)
 %   evidence of an ablation run and reports, for every pair, whether the
 %   gate still escalates the patients the classifier sends home.
 %
-%   RUNDIRECTORY must hold spatial_evidence.mat and per_case.csv from
-%   eval/ablationHarness.m.
+%   RUNDIRECTORY must hold spatial_evidence.mat, per_case.csv and
+%   ablation_summary.json from eval/ablationHarness.m.  The split and the
+%   frozen threshold are read from the summary rather than assumed, so the
+%   patients the gate has to catch are defined by the run's own operating
+%   point and the answer records which split chose the pair.
+%
+%   The verdict itself comes from grade.spatialVerdict.  This function
+%   mirrored it once and drifted: the copy scored candidates that all land
+%   off the map as vacuous agreement, where the deployed gate escalates
+%   them.  See tests/TestSpatialConstantSweep.m.
 %
 %   Why this is scored on a constraint before an objective.  The gate is
 %   the only mechanism in the pipeline that escalates d1a24527a15d, a
@@ -46,6 +54,16 @@ end
 if ~isfile(perCasePath)
     error('eval:MissingPerCase', 'No per_case.csv in %s.', runDirectory);
 end
+summaryPath = fullfile(runDirectory, 'ablation_summary.json');
+if ~isfile(summaryPath)
+    error('eval:MissingAblationSummary', ...
+        ['No ablation_summary.json in %s. The sweep reads the split and ' ...
+        'the frozen threshold from it rather than assuming either, so a ' ...
+        'run that does not name them cannot be swept.'], runDirectory);
+end
+summary = jsondecode(fileread(summaryPath));
+split = string(summary.split);
+threshold = summary.frozenOperatingPoint.threshold;
 
 loaded = load(evidencePath, 'evidence');
 % Pick the record for the configuration being swept. The classical and
@@ -77,19 +95,27 @@ values = evidence.values(where);
 
 % The patients the classifier sends home: truth referable, probability
 % below the frozen threshold. These are what the gate has to keep catching.
-mustCatch = rows.truth_referable == 1 & rows.calibrated_probability < 0.40;
-fprintf('%s: %d cases, %d of them sent home by the classifier alone.\n', ...
-    options.config, height(rows), sum(mustCatch));
+mustCatch = rows.truth_referable == 1 & rows.calibrated_probability < threshold;
+fprintf('%s on the %s split (n=%d): %d cases, %d of them sent home by the classifier alone.\n', ...
+    options.config, split, summary.n, height(rows), sum(mustCatch));
 
 cuts = options.cuts(:);
 fractions = options.fractions(:);
 gateFires = false(height(rows), numel(cuts), numel(fractions));
 for cutIndex = 1:numel(cuts)
-    cleared = cellfun(@(v) localCleared(v, cuts(cutIndex)), values);
     for fractionIndex = 1:numel(fractions)
-        % The gate fires (escalates) when the cleared fraction falls short.
+        % Ask the deployed rule rather than re-deriving it here.  A sweep
+        % that mirrors the verdict is how the evaluation path drifts from
+        % the pipeline while still passing its own tests, and the two
+        % zero-candidate cases grade.spatialEvidence keeps distinguishable
+        % are exactly what a mirror flattens: no candidates at all is
+        % vacuous agreement, candidates that all land off the map is a real
+        % failure to correspond that escalates at every fraction.
+        configuration = struct( ...
+            'spatialAttentionCut', cuts(cutIndex), ...
+            'spatialAgreementFraction', fractions(fractionIndex));
         gateFires(:, cutIndex, fractionIndex) = ...
-            cleared < fractions(fractionIndex);
+            ~cellfun(@(v) grade.spatialVerdict(v, configuration), values);
     end
 end
 
@@ -101,13 +127,16 @@ admissible = caught == required;
 result = struct();
 result.config = string(options.config);
 result.runDirectory = string(runDirectory);
+result.split = split;
+result.n = summary.n;
+result.threshold = threshold;
 result.cuts = cuts;
 result.fractions = fractions;
 result.mustCatch = rows.image_id(mustCatch);
 result.caughtOfRequired = caught;
 result.escalationLoad = fired / height(rows);
 result.admissible = admissible;
-result.shipped = struct('cut', 0.35, 'fraction', 0.25);
+result.shipped = localShippedPair();
 
 localPrint(result, required);
 
@@ -116,20 +145,15 @@ if ~isempty(options.resultsRoot)
 end
 end
 
-function cleared = localCleared(entry, cut)
-%LOCALCLEARED The fraction of candidate points reaching CUT.
-%   Mirrors grade.spatialVerdict: no usable heatmap is not agreement, and
-%   no candidates at all is vacuous agreement, which is expressed here as a
-%   cleared fraction of 1 so that no fraction threshold ever fires on it.
-if isempty(entry) || ~entry.known
-    cleared = 0;
-    return;
-end
-if entry.candidatesScored == 0
-    cleared = 1;
-    return;
-end
-cleared = mean(entry.values >= cut);
+function shipped = localShippedPair()
+%LOCALSHIPPEDPAIR The pair config/default.json actually ships.
+%   Read rather than written down, so the row this sweep labels "shipped"
+%   cannot go stale behind the configuration it claims to describe.  That
+%   is the whole point of moving these two constants into configuration.
+policy = jsondecode(fileread(fullfile(localProjectRoot(), 'config', ...
+    'default.json'))).decision_policy;
+shipped = struct('cut', policy.spatialAttentionCut, ...
+    'fraction', policy.spatialAgreementFraction);
 end
 
 function options = localOptions(varargin)
@@ -171,8 +195,11 @@ fprintf('%-34s %8.2f %8.2f %15.1f%%\n', 'shipped', result.shipped.cut, ...
     result.shipped.fraction, 100 * shippedLoad);
 fprintf('%-34s %8.2f %8.2f %15.1f%%\n', 'lowest load still catching all', ...
     result.cuts(cutIndex), result.fractions(fractionIndex), 100 * best);
-fprintf(['\nA pair here is a candidate to confirm on calibration, not a\n' ...
-    'value to ship: it was chosen on the split that measures it.\n']);
+fprintf(['\nSwept on the %s split. A pair chosen here is a candidate to\n' ...
+    'confirm on a split that did not pick it, not a value to ship: a\n' ...
+    'safety constant selected on the split that measures it will find\n' ...
+    'savings bought by a patient the gate was there to catch.\n'], ...
+    result.split);
 end
 
 function value = localLoadAt(result, cut, fraction)
