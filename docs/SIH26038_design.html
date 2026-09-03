@@ -1685,6 +1685,35 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0">The cause was the export, not the sweep. <code>eval/ablationHarness.m</code> holds one feature cache carrying the classical channel, and a configuration reading the learned channel swaps it in when it composes its decisions, on a per-configuration copy. Exporting the cache therefore swept A10 against evidence it never saw. The export now records what each configuration's decisions actually used, keyed by configuration id, and <code>TestAblationHarness.exportedEvidenceIsWhatTheDecisionsUsed</code> pins that the exported values reproduce the statistic each decision was taken from. An export that cannot drift from what was decided is the only kind worth sweeping. <span class="tag v">Verified</span></p>
 </div>
 
+<h3>§11.6 measured results - 4 September 2026, the recalibrated constants do not transfer</h3>
+
+<div class="box warn">
+<h4>The entry above proposed a change worth 71 patients. Confirming it on a second split rejects it.</h4>
+<p>The sweep of 3 September found 0.40 / 0.15 escalating all four patients the classifier sends home on validation, at 44.2 per cent load against the shipped 57.1 per cent, and recorded it as a proposal awaiting confirmation on calibration rather than a change. That confirmation has run. Calibration pass <code>results/20260904_004923_ablation_A1_A5</code>, sweep <code>results/20260904_004930_spatial_constant_sweep</code>.</p>
+<p style="margin-bottom:0">The question was fixed before the run: does the pair selected on validation still escalate every classifier miss on calibration, and at what load? Not "what is the best pair on calibration", because adopting that would repeat one split over the error the confirmation exists to catch. <span class="tag v">Verified</span></p>
+</div>
+
+<table class="kv">
+<tbody>
+<tr><td><strong>Calibration split, n = 365, five classifier misses</strong></td><td><strong>Catches</strong></td><td><strong>Escalation load</strong></td></tr>
+<tr><td>Shipped, cut 0.35 / fraction 0.25</td><td><strong>5 of 5</strong></td><td>56.7%</td></tr>
+<tr><td>Candidate, cut 0.40 / fraction 0.15</td><td><strong>4 of 5</strong></td><td>44.1%</td></tr>
+</tbody>
+</table>
+
+<div class="box warn">
+<h4>The patient the candidate loses, and the single number that explains it</h4>
+<p>The candidate sends home <code>4ef0b485a7da</code>, reference grade 2, which the classifier scores at a calibrated referable probability of <strong>0.0675</strong>. That is not a borderline case the classifier hedged on. It is one it was confidently wrong about, which is the population §8.6 is written for.</p>
+<p style="margin-bottom:0">Her cleared fraction at the shipped attention cut of 0.35 is <strong>0.2000</strong>, below the shipped agreement fraction of 0.25, so the gate fires and she is escalated. At the candidate's cut of 0.40 it is <strong>0.1875</strong>, above the candidate's fraction of 0.15, so the gate does not fire and she is auto-cleared. <strong>The candidate's 12.6 points of saving are bought by lowering the bar past this patient.</strong> <span class="tag v">Verified</span></p>
+</div>
+
+<p><strong>D2 is rejected and D4 stands.</strong> <code>config/default.json</code> keeps 0.35 and 0.25. Calibration's own lowest-load pair that catches all five, 0.15 / 0.40 at 41.9 per cent, is also not adopted, because there is no third split left to confirm it on. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>The general finding is worth more than the specific rejection</h4>
+<p style="margin-bottom:0">The validation sweep was correct about validation and wrong about the world, and it was wrong <em>in the direction that looks like an improvement</em>: a 12.9 point gain in escalation load, with a referable patient quietly sent home to pay for it. A safety constant selected on one split and reported on that same split will find savings of exactly this shape, because the load a gate carries is buying the cases on its boundary and the boundary is where a classifier's confident errors sit. This is what §10.4's split discipline and <code>eval/metrics/riskCoverage.m</code> are for, and it is the second time in this study that applying them has reversed a conclusion that looked settled. <span class="tag v">Verified</span></p>
+</div>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">
