@@ -61,3 +61,16 @@ That is 12.9 points, about 71 fewer patients sent to a human out of 550, at no m
 D4 therefore still stands as shipped, and D2 is now a costed proposal rather than an open question. If the calibration confirmation lands before the configuration freeze, D2 should be adopted; if it does not, the shipped pair is safe and the saving is deferred rather than lost.
 
 The cost is unchanged and stated: the gate escalates 314 of 550 cases to catch four. §9.5 prices that at 591.82 grader-hours a year against 214.65 at the scenario deferral rate. Whether that exchange is acceptable is a service-capacity question and not a technical one, and it is the question the gate's defence now rests on.
+
+
+## Addendum, 4 September 2026: D2 is rejected on the confirmation it asked for
+
+The addendum above recorded 0.40 / 0.15 as a costed proposal worth about 71 fewer escalations, pending confirmation on calibration. That confirmation has run and it rejects the pair.
+
+On calibration the classifier sends five referable patients home. The shipped pair catches all five at an escalation load of 56.7 per cent. The candidate catches four at 44.1 per cent, and the one it loses is `4ef0b485a7da`, reference grade 2, scored by the classifier at a calibrated referable probability of 0.0675: a confident error, which is the population the gate exists to catch.
+
+The number that explains it is the patient's cleared fraction. At the shipped cut of 0.35 it is 0.2000, under the shipped fraction of 0.25, so the gate fires. At the candidate's cut of 0.40 it is 0.1875, over the candidate's fraction of 0.15, so it does not. The candidate's 12.6 points of saving are bought by lowering the bar past this patient specifically.
+
+**D2 is rejected and D4 stands.** `config/default.json` keeps 0.35 and 0.25. Calibration's own best pair, 0.15 / 0.40 at 41.9 per cent, is also not adopted: selecting it would repeat one split over the error this confirmation existed to catch, and no third split remains to confirm it on.
+
+The general finding is worth more than the specific rejection. The validation sweep was correct about validation and wrong about the world, and it was wrong in the direction that looks like an improvement: a 12.9 point gain in escalation load, with a referable patient quietly sent home to pay for it. A safety constant selected on one split and reported on the same split will find savings of exactly this kind, which is why §10.4 and `eval/metrics/riskCoverage.m` exist and why this project does not get to skip the confirmation.
