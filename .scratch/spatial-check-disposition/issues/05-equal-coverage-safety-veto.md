@@ -35,3 +35,18 @@ Expect the veto to be unable to discriminate finely at these counts. That is sta
 ## Resolution
 
 Landed in cfff805 (metric) and d53cb83 (application). missesAtCoverage counts false negatives only and drops tied groups at the boundary, erring toward vetoing. equalCoverageVeto applies it to an ablation table and refuses to run if its reconstructed classifier disagrees with the harness A1 row.
+
+### Correction, 4 September 2026
+
+**One acceptance criterion is not met and was signed off anyway.**
+
+"Ablation table carries the baseline column and the `admissible` verdict for every configuration" did not land.
+`eval/ablationHarness.m` gained neither `baseline_misses_at_equal_coverage` nor `admissible`, and `ablation_table.csv` carries neither column.
+The veto lives entirely in the standalone `eval/equalCoverageVeto.m`, which reads a finished ablation table and applies the metric to it.
+
+That is arguably the better design and it is the reason to record the deviation rather than retrofit it four days from the configuration freeze.
+The veto needs the A1 classifier row, which only exists after a full run, and `equalCoverageVeto` refuses to run when its reconstructed classifier disagrees with that row.
+Putting the veto inside the harness would make the harness depend on a comparison that is only meaningful once every configuration in the study has finished, and would change the schema of an output the sealed read consumes.
+
+So the criterion is superseded, not satisfied.
+The number it asked for is published, in the veto table in §11.6 and the README, from a separate tool.

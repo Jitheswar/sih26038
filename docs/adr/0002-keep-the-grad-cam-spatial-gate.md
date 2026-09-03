@@ -74,3 +74,36 @@ The number that explains it is the patient's cleared fraction. At the shipped cu
 **D2 is rejected and D4 stands.** `config/default.json` keeps 0.35 and 0.25. Calibration's own best pair, 0.15 / 0.40 at 41.9 per cent, is also not adopted: selecting it would repeat one split over the error this confirmation existed to catch, and no third split remains to confirm it on.
 
 The general finding is worth more than the specific rejection. The validation sweep was correct about validation and wrong about the world, and it was wrong in the direction that looks like an improvement: a 12.9 point gain in escalation load, with a referable patient quietly sent home to pay for it. A safety constant selected on one split and reported on the same split will find savings of exactly this kind, which is why §10.4 and `eval/metrics/riskCoverage.m` exist and why this project does not get to skip the confirmation.
+
+## Addendum, 4 September 2026: escalation load is not patients, and the sweep carried a copy of the rule
+
+A two-axis review of the whole disposition diff before the configuration freeze found three defects in the measurement, none of which changes the decision and one of which changes a number this document reports.
+
+**"About 71 fewer patients sent to a human" overstates what was measured.**
+`escalationLoad` is the rate at which the *gate fires*, over all cases.
+A case only escapes escalation if nothing else escalates it, so a drop in gate firings is an upper bound on patients released and not a count of them.
+Pairing each reason code with its finding kind from `per_case.csv` gives the gap: on validation the gate fires on 314 of 550 cases and is the sole safety exception on 263 of them, the other 51 carrying a second exception that escalates the case regardless.
+On calibration it fires on 207 of 365 and is the sole exception on 181 of 207.
+So the 12.9 points the candidate pair bought were 12.9 points of gate firings, of which roughly one in six would not have released a patient at all.
+The rejection stands and this makes it firmer: the candidate's saving was smaller than stated and its cost, a referable patient, was not.
+
+**`eval/spatialConstantSweep.m` re-implemented `grade.spatialVerdict` and diverged from it.**
+Its local `localCleared` scored every zero-candidate case as vacuous agreement, ignoring the `outOfFrame` flag that `grade.spatialEvidence` sets when candidates exist and none land on the map.
+The deployed gate escalates that case; the sweep's copy never fired on it at any pair.
+`grade.spatialEvidence` says in its own header that the two zero-length cases "are kept distinguishable here so a sweep cannot silently average them together", which is exactly what the sweep then did.
+
+The divergence is latent rather than active: no case in either split is out of frame, so no published number moves, and the shipped pair's 57.1 and 56.7 per cent reproduce exactly.
+It is fixed rather than left because the sealed set has not been read yet and a single out-of-frame case there would be scored as agreement by the sweep and as escalation by the pipeline.
+The sweep now calls `grade.spatialVerdict` directly, so there is no copy left to drift, and `tests/TestSpatialConstantSweep.m` pins the sweep to the deployed verdict case by case.
+
+**The sweep hardcoded the frozen threshold and did not record its split.**
+It defined the patients the gate must catch with a literal `0.40` rather than reading `frozenOperatingPoint.threshold` from the run, which is the §13.3 defect this effort was chartered to repair, in the file arguing for the repair.
+It also never read the split name, so nothing in its output distinguished the validation sweep from the calibration confirmation, on a question where which split chose a constant is the whole argument.
+Both now come from the run's `ablation_summary.json` and the split is carried on the result.
+
+**Three smaller repairs came out of the same review.**
+The sweep labelled a row "shipped" from a literal 0.35 and 0.25 rather than from `config/default.json`, so the row could have gone stale behind the configuration it claimed to describe, which is the exact failure moving these constants into configuration was meant to end. It now reads the shipped pair.
+`grade.spatialEvidence` had dropped the `isempty(detection)` guard both harness copies carried before D5 merged them; without it a configuration running Grad-CAM without the lesion channel throws instead of returning "not agreement", and the harness try/catch then marks the image failed, which drops the case from the denominators rather than escalating it. Dropping a case silently is worse than escalating it, so the guard is back and `TestSpatialAgreement` pins it.
+`localDecisionConfig` in `src/+app/runScreeningCase.m` did not name the two constants in its fallback, so a configuration omitting `decision_policy` fell through to `grade.spatialVerdict`'s own literals, which is the second set of defaults that function's comment says it avoids. The fallback now names them, and a test pins `spatialVerdict`'s defaults to the shipped configuration so the three copies cannot drift apart.
+
+None of this touches `config/default.json`, the operating point, or the disposition. D2 stays rejected and D4 stays shipped.

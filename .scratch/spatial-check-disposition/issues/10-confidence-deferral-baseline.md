@@ -66,3 +66,18 @@ Two limits of the split are recorded with the result. It contains no ungradable 
 The prediction that the ordering reverses under domain shift is written into §11.6 before the sealed Messidor-2 set is opened, so it cannot be fitted to the result afterwards.
 
 Written up in §11.6, the README status section, and ADR 0002.
+
+### Correction, 4 September 2026
+
+**The first acceptance criterion is not met and was signed off anyway.**
+
+"A14 implemented as an ablation configuration, coverage selected on calibration" did not land as written.
+The second half is satisfied: the cut is selected on calibration at a zero-miss budget and applied unchanged to validation, and `eval/confidenceDeferral.m` refuses with `eval:SelectionSplitReused` if selection and reporting name the same split.
+The first half is not.
+There is no `config/ablation_A14.json`, A14 is not a configuration the harness can run, and it appears in no row of `ablation_table.csv`.
+It is a standalone tool whose numbers were transcribed into the §11.6 and README tables by hand.
+
+The consequence is worth naming rather than hiding.
+Every other row in those tables is reproduced by re-running the harness; the A14 row is not, and a transcription error in it would not be caught by any test.
+Implementing A14 as an ablation configuration is the repair, and it is deliberately not being done before the configuration freeze: it would add a configuration to a study whose table is about to be frozen and read against the sealed set.
+It is recorded here as owed.
