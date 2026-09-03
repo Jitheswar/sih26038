@@ -71,7 +71,8 @@ Swept with `eval/spatialConstantSweep.m` over `results/20260903_230202_ablation_
 | shipped | 0.35 | 0.25 | 57.1% |
 | **lowest load still catching all four** | **0.40** | **0.15** | **44.2%** |
 
-Recalibrating would cut escalation by 12.9 points, about 71 fewer patients sent to a human out of 550, while still catching all four including the proliferative case. On a gate whose entire cost is specialist time, and which §9.5 prices at 591.82 grader-hours a year at the shipped deferral rate, that is a real saving.
+Recalibrating would cut gate firings by 12.9 points, about 71 cases out of 550, while still catching all four including the proliferative case.
+Read that as an upper bound on patients released rather than a count of them: the gate is the sole safety exception on 263 of the 314 cases it fires on, and the other 51 escalate on a second exception regardless. On a gate whose entire cost is specialist time, and which §9.5 prices at 591.82 grader-hours a year at the shipped deferral rate, that is a real saving.
 
 **It is a candidate, not a value to ship.** The pair was chosen on the split that measures it, which is the error §10.4 and §11.1 exist to prevent. Confirming it on calibration before the configuration freeze is what would make it shippable, and that is the remaining step.
 
@@ -82,3 +83,21 @@ Two mistakes had to be corrected before the number above could be trusted, and b
 The first sweep reported 279 of 361 and said the shipped pair fails to catch all four, contradicting §11.6. §11.6 was right. The export was reading the shared feature cache, which holds the classical channel, while A10's decisions swap in the learned channel in `localComposeDecisions` on a per-configuration copy. So A10 was being swept against evidence it never saw. The export now records what each configuration's decisions actually used, keyed by configuration id, and the sweep selects the matching record. `TestAblationHarness.exportedEvidenceIsWhatTheDecisionsUsed` pins it.
 
 The second is that the export was originally called from `localWriteOutputs`, where the feature cache is not in scope. That crashed after a ninety-minute pass had already completed, losing the cache. A forty-second run over three images would have caught it.
+
+
+### Correction, 4 September 2026
+
+Two acceptance criteria were signed off more loosely than they read, and one number above was wrong.
+
+**"A written verdict on whether any pair discriminates, with the separation statistic" is only half met.**
+The sweep reports how many pairs catch every must-catch patient and what each costs in escalation load.
+It does not report a separation statistic.
+The statistic that exists, a median cleared fraction of 0.0200 against 0.2128 with four of four at a 57.1 per cent base rate giving p = 0.106, came from the per-case diagnostic and lives in ADR 0002, not from this sweep.
+
+**"An explicit statement that coverage was not the selection objective" is met only under this ticket's own later wording, not under the spec's.**
+`.scratch/spatial-check-disposition/spec.md` says "The sweep does not select for coverage".
+The 2 September sharpening in this ticket instead says "Constraint" first and then "**Objective, subject to that**: coverage", which is what the code implements: it minimises escalation load among the pairs that catch every patient.
+The ticket supersedes the spec line and the code follows the ticket.
+The spec line should be read as "coverage never overrides the constraint", which is true, and not as "coverage is not the objective", which is not.
+
+**The escalation-load figure is not a patient count**, corrected inline above and in ADR 0002.

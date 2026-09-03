@@ -64,7 +64,7 @@ Every escalation on the validation split was attributed to the §8.6 state that 
 
 The Grad-CAM spatial check is the largest single cause in every configuration: 335 of 399 escalations in A5, 340 of 525 in A7, 314 of 512 in A9.
 §8.6 specifies that state as a report flag with escalation to be considered; the code raises it as a mandatory reason code, and `decisionConfiguration` refuses to start if it is switched off.
-Its test is `mean(heatmap(candidatePoints) >= 0.35) >= 0.25`, two constants that are not in configuration and were not selected against data, applied to a channel §8.3 records as unable to localise a microaneurysm.
+Its test is `mean(heatmap(candidatePoints) >= 0.35) >= 0.25`, two constants that were not in configuration at the time and had not been selected against data, applied to a channel §8.3 records as unable to localise a microaneurysm.
 
 The exact ICDR level comparison is the second cause.
 All 174 insufficient-evidence escalations in A9 are level mismatches, and 163 of them (93.7 per cent) place the patient on the same side of the referral decision and differ only on severity.
@@ -177,6 +177,32 @@ The earlier claim that this failure "barely occurs in domain" was wrong, and the
 It reverses in domain, on this split.
 A14 remains not a competing deliverable: R4.1 to R4.5 require an explanation, lesion-level evidence, an ICDR trace and an annotated report, and a confidence score is none of those.
 One limit of the split still stands: it contains no ungradable image, so the quality gate never fires and A14's lack of one costs it nothing measurable here.
+
+The two spatial constants are now in configuration, and they have now been selected against data and kept.
+
+`spatialAttentionCut` and `spatialAgreementFraction` moved into `config/*.json` under `decision_policy` at the 0.35 and 0.25 that have always shipped, so no deployed behaviour changed.
+That repair was owed whichever disposition won: §11.6 had recorded this as the one §8.6 state that could not be switched from configuration, and the test existed as two separate copies each carrying the constants inline.
+The test is now split into `grade.spatialEvidence`, which is expensive and holds no constants, and `grade.spatialVerdict`, which is cheap and applies them, so one cached pass over a split answers any pair offline.
+
+`eval/spatialConstantSweep.m` then swept 19 attention cuts by 19 agreement fractions on validation, scored constraint-first: a pair that stops escalating any of the four is rejected whatever it does to coverage.
+291 of 361 pairs still escalate all four.
+The shipped pair catches 4 of 4 at an escalation load of 57.1 per cent, reproducing the §11.6 figure exactly, and the lowest load among pairs that still catch all four is a cut of 0.40 with a fraction of 0.15, at 44.2 per cent.
+That is 12.9 points, about 71 cases the gate stops firing on out of 550, at no measured cost in the patients the gate exists to catch.
+Read that as an upper bound on patients released rather than as a count of them.
+A case escapes escalation only if nothing else escalates it, and in A10 the gate is the sole safety exception on 263 of the 314 cases it fires on: the other 51 carry a second exception and would escalate with the gate demoted or retuned.
+
+It did not ship on that evidence, because it was selected on the split that measured it.
+The confirmation ran on calibration and it rejects the pair.
+There the classifier sends five referable patients home, the shipped pair catches all five at an escalation load of 56.7 per cent, and the candidate catches four at 44.1 per cent.
+The one it loses is `4ef0b485a7da`, reference grade 2, scored by the classifier at a calibrated referable probability of 0.0675: a confident error, which is the population the gate exists to catch.
+Its cleared fraction is 0.2000 at the shipped cut of 0.35 and 0.1875 at the candidate's cut of 0.40, so the candidate's saving is bought by lowering the bar past this patient specifically.
+
+**D2 is rejected and the shipped 0.35 and 0.25 stand.**
+Calibration's own best pair is not adopted either, because selecting it would repeat on one split the error this confirmation existed to catch, and no third split remains to confirm it on.
+The general finding outlives the specific rejection.
+The validation sweep was correct about validation and wrong about the world, and it was wrong in the direction that looks like an improvement: a 12.9 point gain in escalation load, with a referable patient quietly sent home to pay for it.
+A safety constant selected on one split and reported on the same split will find savings of exactly this kind, which is why §10.4 and `eval/metrics/riskCoverage.m` exist.
+See `docs/adr/0002-keep-the-grad-cam-spatial-gate.md`.
 
 Vessel segmentation (§6.3, R2.2) is trained.
 A patch-based U-Net on the CLAHE-equalised green channel, trained on DRIVE at 128x128 crops, selected on validation AUC at epoch 8 of 16 before early stopping.

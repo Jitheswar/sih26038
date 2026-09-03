@@ -25,8 +25,16 @@ function evidence = spatialEvidence(gradCAMResult, detection)
 evidence = struct('values', zeros(0, 1), 'known', false, ...
     'candidatesScored', 0);
 
-if ~isstruct(gradCAMResult) || ~isfield(gradCAMResult, 'normalizedHeatmap') ...
+if isempty(detection) || ~isstruct(gradCAMResult) ...
+        || ~isfield(gradCAMResult, 'normalizedHeatmap') ...
         || isempty(gradCAMResult.normalizedHeatmap)
+    % An absent detection reaches here from a configuration that runs
+    % Grad-CAM without the lesion channel.  The harness copies this
+    % function replaced both guarded it and returned "not agreement", so
+    % the case escalated.  Without the guard it throws instead, and the
+    % harness try/catch marks the image failed, which drops it from the
+    % denominators rather than escalating it.  Dropping a case silently is
+    % worse than escalating it, so the guard stays.
     return;
 end
 

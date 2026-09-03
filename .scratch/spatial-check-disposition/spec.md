@@ -45,6 +45,8 @@ D3 is descoped: it is new design and new code, and it is only justified if D2's 
 
 **The sweep does not select for coverage.** D2 characterises whether the constants can discriminate at all. If no pair separates the missed-referable cases from the rest, that is the finding, and it retires the gate on evidence rather than on wording alone.
 
+> Superseded 2 September 2026 by the sharpening in issue 07. The sweep is scored constraint-first and then ranks the surviving pairs by escalation load, so coverage *is* the objective subject to the safety constraint. Read this line as "coverage never overrides the constraint", which the code enforces.
+
 ## Out of scope
 
 - D3, the regional re-specification.

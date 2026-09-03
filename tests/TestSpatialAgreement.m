@@ -28,6 +28,19 @@ classdef TestSpatialAgreement < matlab.unittest.TestCase
             testCase.verifyFalse(evidence.known);
         end
 
+        function anAbsentDetectionIsNotAgreementAndDoesNotThrow(testCase)
+            % A configuration that runs Grad-CAM without the lesion channel
+            % reaches here with no detection at all. The two harness copies
+            % this function replaced both guarded it and returned "not
+            % agreement". Without the guard it throws, and the harness
+            % try/catch then marks the image failed, dropping it from the
+            % denominators instead of escalating it.
+            [agree, evidence] = grade.spatialAgreement( ...
+                TestSpatialAgreement.gradCam(zeros(4, 4)), []);
+            testCase.verifyFalse(agree);
+            testCase.verifyFalse(evidence.known);
+        end
+
         function noCandidatesAgreesVacuously(testCase)
             % No candidate can fall outside the attention, so there is
             % nothing for this test to disagree about.
@@ -125,6 +138,40 @@ classdef TestSpatialAgreement < matlab.unittest.TestCase
             configuration = decisionPolicyConfiguration();
             testCase.verifyEqual(configuration.spatialAttentionCut, 0.35);
             testCase.verifyEqual(configuration.spatialAgreementFraction, 0.25);
+        end
+
+        function theVerdictsOwnDefaultsMatchTheShippedConfiguration(testCase)
+            % The two constants have defaults in three places: the shipped
+            % config, decisionConfiguration's fallback, and spatialVerdict's
+            % own. They agree today and nothing was pinning them together,
+            % so a change to one would move the deployed gate while every
+            % other default stayed put.
+            configuration = decisionPolicyConfiguration();
+
+            % Values [1 0.5 0.2 0] clear at a rate that moves if the cut
+            % does, so comparing the fraction pins spatialAttentionCut.
+            spread = grade.spatialEvidence( ...
+                TestSpatialAgreement.gradCam([1 0.5; 0.2 0]), ...
+                TestSpatialAgreement.candidates([1 1; 2 1; 1 2; 2 2]));
+            [~, configuredFraction] = ...
+                grade.spatialVerdict(spread, configuration);
+            [~, fallbackFraction] = grade.spatialVerdict(spread);
+            testCase.verifyEqual(fallbackFraction, configuredFraction, ...
+                ['spatialVerdict''s default attention cut disagrees with ' ...
+                'the shipped configuration.']);
+
+            % Values [1 0.3 0.2 0] clear at exactly 0.25, so the verdict
+            % sits on the shipped agreement fraction and flips if it rises.
+            boundary = grade.spatialEvidence( ...
+                TestSpatialAgreement.gradCam([1 0.3; 0.2 0]), ...
+                TestSpatialAgreement.candidates([1 1; 2 1; 1 2; 2 2]));
+            [configuredAgree, boundaryFraction] = ...
+                grade.spatialVerdict(boundary, configuration);
+            fallbackAgree = grade.spatialVerdict(boundary);
+            testCase.verifyEqual(boundaryFraction, 0.25, 'AbsTol', 1e-12);
+            testCase.verifyEqual(fallbackAgree, configuredAgree, ...
+                ['spatialVerdict''s default agreement fraction disagrees ' ...
+                'with the shipped configuration.']);
         end
 
         function anOutOfRangeConstantIsRejected(testCase)
