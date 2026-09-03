@@ -48,4 +48,16 @@ It further revises what §8.3 was taken to imply. §8.3 is right that a 14x14 ma
 
 **D2's value is revised upward and its risk is now explicit.** Recalibrating the constants to raise coverage would move the cut on the very statistic that separates these four patients from the rest, and the patient it would most easily lose is the proliferative one. Any sweep must be scored on whether it still escalates all four, not on coverage.
 
+## Addendum, 3 September 2026: D2 is measured, and it is worth about 71 patients
+
+The sweep that addendum called for has run. `eval/spatialConstantSweep.m` over 19 attention cuts by 19 agreement fractions, scored constraint-first: a pair that stops escalating any of the four is rejected whatever it does to coverage.
+
+**291 of 361 pairs still escalate all four.** The shipped pair catches 4 of 4 at an escalation load of 57.1 per cent, reproducing the §11.6 figure exactly. The lowest load among pairs that still catch all four is `spatialAttentionCut` 0.40 with `spatialAgreementFraction` 0.15, at 44.2 per cent.
+
+That is 12.9 points, about 71 fewer patients sent to a human out of 550, at no measured cost in the patients the gate exists to catch. §9.5 prices the shipped deferral rate at 591.82 grader-hours a year against 214.65 at the scenario rate, so this is a saving denominated in the scarcest resource the district model has.
+
+**It does not ship on this evidence.** The pair was selected on the validation split, which is the split that measures it, and this project does not get to select a safety constant that way after building `riskCoverage.m` to prevent exactly that class of error. Confirming it on the calibration split is the step that would make it shippable, and it is cheap now that the evidence export exists: one pass over calibration, then the sweep runs offline.
+
+D4 therefore still stands as shipped, and D2 is now a costed proposal rather than an open question. If the calibration confirmation lands before the configuration freeze, D2 should be adopted; if it does not, the shipped pair is safe and the saving is deferred rather than lost.
+
 The cost is unchanged and stated: the gate escalates 314 of 550 cases to catch four. §9.5 prices that at 591.82 grader-hours a year against 214.65 at the scenario deferral rate. Whether that exchange is acceptable is a service-capacity question and not a technical one, and it is the question the gate's defence now rests on.

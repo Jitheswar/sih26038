@@ -1657,6 +1657,34 @@ AGREEMENT      Rule path and CNN agree
 <p style="margin-bottom:0">This also revises what §8.3 implies about the gate. §8.3 is right that a 14x14 map cannot localise a microaneurysm, and the earlier reading took that to mean a test built on it asks for precision the channel does not have. The measurement says the coarse signal is nonetheless lowest exactly where the classifier is wrong. A channel too coarse to say <em>where</em> a lesion is can still say that attention and evidence are not in the same place at all, and that is what this gate reads. <span class="tag v">Verified</span></p>
 </div>
 
+<h3>§11.6 measured results - 3 September 2026, the spatial gate's two constants</h3>
+
+<p>The correction above establishes that the Grad-CAM spatial gate is the only mechanism escalating a proliferative patient the classifier is confidently wrong about, and that it costs 57.1 per cent of the caseload to do it. Neither of its two constants had ever been selected against data. This sweeps them.</p>
+
+<p>Run with <code>eval/spatialConstantSweep.m</code> over <code>results/20260903_230202_ablation_A1_A5</code>: 19 attention cuts by 19 agreement fractions, evaluated offline against the candidate-point values the harness now exports. <strong>Scored constraint-first</strong>: a pair that stops escalating any of the four patients the classifier sends home is rejected whatever it does to coverage, because the patient such a pair loses first is the proliferative one.</p>
+
+<table class="kv">
+<tbody>
+<tr><td></td><td><strong>Attention cut</strong></td><td><strong>Agreement fraction</strong></td><td><strong>Escalation load</strong></td><td><strong>Catches all four</strong></td></tr>
+<tr><td>Shipped</td><td>0.35</td><td>0.25</td><td>57.1%</td><td>Yes (4 of 4)</td></tr>
+<tr><td><strong>Lowest load still catching all four</strong></td><td><strong>0.40</strong></td><td><strong>0.15</strong></td><td><strong>44.2%</strong></td><td><strong>Yes (4 of 4)</strong></td></tr>
+</tbody>
+</table>
+
+<p><strong>291 of 361 pairs still escalate all four.</strong> The shipped pair's 57.1 per cent reproduces the figure in the correction above exactly, which is the check that the sweep and this document are measuring the same thing. <span class="tag v">Verified</span></p>
+
+<div class="box warn">
+<h4>Worth about 71 patients, and not shippable on this evidence</h4>
+<p>Moving to 0.40 and 0.15 cuts the escalation load by 12.9 points, <strong>about 71 fewer patients sent to a human out of 550</strong>, at no measured cost in the patients the gate exists to catch. §9.5 prices the shipped deferral rate at 591.82 grader-hours a year against 214.65 at the scenario rate, so the saving is denominated in the scarcest resource the district model has.</p>
+<p style="margin-bottom:0"><strong>It does not ship on this measurement.</strong> The pair was selected on the validation split, which is the split that reports it, and that is the class of error <code>eval/metrics/riskCoverage.m</code> and §10.4 exist to prevent. Confirming it on the calibration split is what would make it shippable, and it is now cheap: one pass over calibration, then the sweep runs offline against the exported values. Until then the shipped pair stays, and the saving is deferred rather than lost. <span class="tag o">Open</span></p>
+</div>
+
+<div class="box warn">
+<h4>The first sweep gave a plausible wrong answer, and this is how it was caught</h4>
+<p>The first run reported 279 of 361 and said the shipped pair <em>fails</em> to catch all four, contradicting the correction above. The contradiction was the only signal that anything was wrong; the surface itself looked entirely reasonable.</p>
+<p style="margin-bottom:0">The cause was the export, not the sweep. <code>eval/ablationHarness.m</code> holds one feature cache carrying the classical channel, and a configuration reading the learned channel swaps it in when it composes its decisions, on a per-configuration copy. Exporting the cache therefore swept A10 against evidence it never saw. The export now records what each configuration's decisions actually used, keyed by configuration id, and <code>TestAblationHarness.exportedEvidenceIsWhatTheDecisionsUsed</code> pins that the exported values reproduce the statistic each decision was taken from. An export that cannot drift from what was decided is the only kind worth sweeping. <span class="tag v">Verified</span></p>
+</div>
+
 <h3>§11.7 measured results &mdash; 30 August 2026, learned lesion channel</h3>
 <p>Re-measured with <code>eval/explanationQuality.m</code> after training Track B, same protocol and the same 27 IDRiD Set-B frames as the 24 August run below, with <code>'LesionCheckpoint'</code> pointing at <code>results/20260830_093848_lesion_segmentation/best_lesion_model.mat</code>. Results: <code>results/20260830_113826_explanation_quality</code>. The Grad-CAM row, the random control, and the faithfulness and sanity figures reproduce the earlier run exactly, which is the check that only the lesion channel changed.</p>
 <table class="kv">

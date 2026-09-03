@@ -90,6 +90,11 @@ for index = 1:numel(configs)
 end
 
 localWriteOutputs(resultsDirectory, perConfig, configs, split, frozen, options);
+% Written here rather than inside localWriteOutputs because the feature
+% cache is only in scope in this function, and the values are the whole
+% point of the export: without them a sweep can move the agreement
+% fraction and not the attention cut.
+
 localPrintTable(rows);
 
 result = struct();
@@ -516,7 +521,7 @@ if entry.learnedLesionEvidence
     features.ruleCaseUnknown = features.learnedRuleCaseUnknown;
     features.ruleResults = features.learnedRuleResults;
     features.spatiallyAgree = features.learnedSpatiallyAgree;
-features.spatialEvidence = features.learnedSpatialEvidence;
+    features.spatialEvidence = features.learnedSpatialEvidence;
     features.evidenceSupportsCNN = features.learnedEvidenceSupportsCNN;
 end
 n = split.n;
@@ -547,6 +552,11 @@ decisions.referableProbability = nan(n, 1);
 % findings, and the boolean cannot tell them apart.
 decisions.spatialStatistic = nan(n, 1);
 decisions.findingKinds = strings(n, 1);
+% The evidence this configuration's decisions were actually taken from,
+% after the channel swap above.  Exported rather than the cache, because
+% the cache holds the classical channel and a configuration reading the
+% learned one would otherwise be swept against evidence it never saw.
+decisions.spatialEvidence = features.spatialEvidence;
 % The policy's own gates, not the frozen operating point.  frozen.threshold
 % is 0.40 and selects the reported sensitivity/specificity; the policy
 % refers at referableThreshold and clears below autoClearThreshold, and a
@@ -884,6 +894,51 @@ fprintf(['\nSens and spec are over all cases at the frozen threshold. ' ...
     'coverage.\n']);
 end
 
+function localWriteSpatialEvidence(resultsDirectory, perConfig, split)
+%LOCALWRITESPATIALEVIDENCE The raw values behind the §8.6 spatial verdict.
+%   per_case.csv carries the cleared fraction, which is mean(values >= cut)
+%   at the configured cut. That is enough to sweep spatialAgreementFraction
+%   and not enough to sweep spatialAttentionCut, because the cut is already
+%   baked into it. The values themselves make both sweepable, and they cost
+%   one pass to produce and nothing to keep.
+%
+%   Written per configuration from its own decisions rather than from the
+%   shared feature cache. The cache holds the classical channel; a
+%   configuration reading the learned one swaps it in when it composes its
+%   decisions, so exporting the cache would sweep a configuration against
+%   evidence it never saw. Exporting what was used cannot drift from what
+%   was decided.
+evidence = struct('config', {}, 'imageIds', {}, 'values', {}, ...
+    'known', {}, 'candidatesScored', {});
+for index = 1:numel(perConfig)
+    entry = perConfig(index);
+    if ~isfield(entry, 'decisions') || ...
+            ~isfield(entry.decisions, 'spatialEvidence')
+        continue;
+    end
+    used = entry.decisions.spatialEvidence;
+    record = struct();
+    record.config = string(entry.id);
+    record.imageIds = split.imageIds;
+    record.values = used;
+    record.known = cellfun(@(e) ~isempty(e) && e.known, used);
+    record.candidatesScored = cellfun(@localScoredCount, used);
+    evidence(end + 1) = record; %#ok<AGROW>
+end
+if isempty(evidence)
+    return;
+end
+save(fullfile(resultsDirectory, 'spatial_evidence.mat'), 'evidence', '-v7.3');
+end
+
+function count = localScoredCount(evidenceEntry)
+if isempty(evidenceEntry)
+    count = 0;
+else
+    count = evidenceEntry.candidatesScored;
+end
+end
+
 function localWritePerCase(resultsDirectory, perConfig)
 %LOCALWRITEPERCASE The rows behind every column the ablation table reports.
 %   Written by the harness rather than by a separate diagnostic, because
@@ -940,6 +995,7 @@ end
 
 localWriteText(fullfile(resultsDirectory, 'ablation_table.csv'), strjoin(lines, newline));
 localWritePerCase(resultsDirectory, perConfig);
+localWriteSpatialEvidence(resultsDirectory, perConfig, split);
 localWriteText(fullfile(resultsDirectory, 'ablation_summary.json'), ...
     jsonencode(summary, 'PrettyPrint', true));
 save(fullfile(resultsDirectory, 'ablation_results.mat'), 'perConfig', '-v7.3');
