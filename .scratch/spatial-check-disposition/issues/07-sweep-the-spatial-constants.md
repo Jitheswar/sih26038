@@ -1,6 +1,6 @@
 # Sweep the spatial check constants on the calibration split
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 ## Problem
@@ -56,4 +56,29 @@ So the sweep is scored on a constraint before an objective:
 
 Report the surface with the four patients marked on it, so the boundary where each is lost is visible rather than implied.
 
-The data for this already exists. `results/20260902_052342_ablation_A1_A5/per_case.csv` carries the spatial statistic per case per configuration, so the constraint can be evaluated offline for any pair without a further GPU pass. A fresh calibration-split pass is still wanted for selection discipline, but the validation-split surface can be drawn now.
+**Correction, 2 September 2026.** The claim that this needs no GPU pass was wrong. `per_case.csv` carries `spatial_statistic`, which is `mean(values >= cut)` at the *configured* cut of 0.35, so the cut is already baked into it. That sweeps `spatialAgreementFraction` and cannot sweep `spatialAttentionCut`.
+
+The fix is to export the raw candidate-point values, which cost one pass to produce and nothing to keep. `eval/ablationHarness.m` now writes `spatial_evidence.mat` alongside `per_case.csv`, and `eval/spatialConstantSweep.m` sweeps both constants over it offline. Every future run carries the values, so this pass is paid once.
+
+## Resolution
+
+Swept with `eval/spatialConstantSweep.m` over `results/20260903_230202_ablation_A1_A5`, 19 attention cuts by 19 agreement fractions, scored constraint-first.
+
+**291 of 361 pairs still escalate all four patients the classifier sends home.** The shipped pair catches 4 of 4 at an escalation load of 57.1 per cent, which reproduces the §11.6 figure exactly and is the check that the sweep and the design document agree.
+
+| | cut | fraction | escalation load |
+| --- | --- | --- | --- |
+| shipped | 0.35 | 0.25 | 57.1% |
+| **lowest load still catching all four** | **0.40** | **0.15** | **44.2%** |
+
+Recalibrating would cut escalation by 12.9 points, about 71 fewer patients sent to a human out of 550, while still catching all four including the proliferative case. On a gate whose entire cost is specialist time, and which §9.5 prices at 591.82 grader-hours a year at the shipped deferral rate, that is a real saving.
+
+**It is a candidate, not a value to ship.** The pair was chosen on the split that measures it, which is the error §10.4 and §11.1 exist to prevent. Confirming it on calibration before the configuration freeze is what would make it shippable, and that is the remaining step.
+
+### What this cost, and what it changed about how the sweep is scored
+
+Two mistakes had to be corrected before the number above could be trusted, and both are worth recording because the first one produced a plausible answer.
+
+The first sweep reported 279 of 361 and said the shipped pair fails to catch all four, contradicting §11.6. §11.6 was right. The export was reading the shared feature cache, which holds the classical channel, while A10's decisions swap in the learned channel in `localComposeDecisions` on a per-configuration copy. So A10 was being swept against evidence it never saw. The export now records what each configuration's decisions actually used, keyed by configuration id, and the sweep selects the matching record. `TestAblationHarness.exportedEvidenceIsWhatTheDecisionsUsed` pins it.
+
+The second is that the export was originally called from `localWriteOutputs`, where the feature cache is not in scope. That crashed after a ninety-minute pass had already completed, losing the cache. A forty-second run over three images would have caught it.

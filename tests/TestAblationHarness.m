@@ -185,26 +185,6 @@ classdef TestAblationHarness < matlab.unittest.TestCase
             testCase.verifyTrue(isfile(fullfile(directory, 'config_A1.json')));
             testCase.verifyFalse(result.sealedDataAccessed);
         end
-    end
-
-    methods (Static, Access = private)
-        function root = projectRoot()
-            root = fileparts(fileparts(which('TestAblationHarness')));
-        end
-
-        function decision = deployedDecision(deployed)
-            if strcmp(deployed.status, "stopped_quality_gate")
-                decision = "human-review";
-            else
-                decision = string(deployed.threeWayDecision.decision);
-            end
-        end
-
-        function removeDirectory(directory)
-            if isfolder(directory)
-                rmdir(directory, 's');
-            end
-        end
 
         function perCaseRowsReconcileWithTheAggregates(testCase)
             % The safety column counts referable patients sent home, and
@@ -217,7 +197,7 @@ classdef TestAblationHarness < matlab.unittest.TestCase
                 'per_case.csv'), 'TextType', 'string');
             testCase.assertNotEmpty(perCase);
 
-            metrics = result.perConfig(1);
+            metrics = result.metrics(1);
             rows = perCase(perCase.config == "A10", :);
             testCase.verifyEqual(height(rows), metrics.n, ...
                 'One row per evaluated case.');
@@ -251,5 +231,63 @@ classdef TestAblationHarness < matlab.unittest.TestCase
                     'A patient the pipeline escalated was not sent home.');
             end
         end
+
+        function exportedEvidenceIsWhatTheDecisionsUsed(testCase)
+            % The cache holds the classical channel and a configuration
+            % reading the learned one swaps it in when it composes its
+            % decisions, so an export taken from the cache sweeps a
+            % configuration against evidence it never saw. This pins that
+            % the exported values reproduce the statistic the decision was
+            % actually taken from, which is the invariant that broke.
+            result = ablationHarness('Configs', {'ablation_A10.json'}, ...
+                'Limit', 6, 'ResultsRoot', tempname());
+            directory = char(result.resultsDirectory);
+            loaded = load(fullfile(directory, 'spatial_evidence.mat'), 'evidence');
+            testCase.assertTrue(any(strcmp( ...
+                string({loaded.evidence.config}), "A10")), ...
+                'No spatial evidence recorded for the configuration that ran.');
+            evidence = loaded.evidence(strcmp( ...
+                string({loaded.evidence.config}), "A10"));
+
+            rows = readtable(fullfile(directory, 'per_case.csv'), ...
+                'TextType', 'string');
+            rows = rows(rows.config == "A10", :);
+            [found, where] = ismember(rows.image_id, evidence.imageIds);
+            testCase.assertTrue(all(found), ...
+                'Every per-case row must have exported evidence.');
+
+            for index = 1:height(rows)
+                entry = evidence.values{where(index)};
+                if isempty(entry) || ~entry.known || entry.candidatesScored == 0
+                    continue;
+                end
+                testCase.verifyEqual( ...
+                    mean(entry.values >= 0.35), ...
+                    rows.spatial_statistic(index), 'AbsTol', 1e-9, ...
+                    sprintf(['Exported evidence for %s does not reproduce ' ...
+                    'the statistic its decision used.'], rows.image_id(index)));
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function root = projectRoot()
+            root = fileparts(fileparts(which('TestAblationHarness')));
+        end
+
+        function decision = deployedDecision(deployed)
+            if strcmp(deployed.status, "stopped_quality_gate")
+                decision = "human-review";
+            else
+                decision = string(deployed.threeWayDecision.decision);
+            end
+        end
+
+        function removeDirectory(directory)
+            if isfolder(directory)
+                rmdir(directory, 's');
+            end
+        end
+
     end
 end
